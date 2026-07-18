@@ -406,13 +406,35 @@ const REFERENCE_INFLATION = {
   'Kazakhstan':{v:8.8,y:2024}, 'Uzbekistan':{v:9.6,y:2024},
 };
 
+// World Bank ICP Price Level Index (2021, world average = 100). Used ONLY to propose a
+// default % price difference between two countries when benchmarking; always editable.
+// Source: World Bank International Comparison Program, via Wikipedia "List of countries by price level".
+// Note: this is a whole-economy price index, not geotechnical-specific — treat the default as a starting point.
+const PRICE_LEVEL = {
+  'Saudi Arabia':80.7,'United Arab Emirates':101.9,'Qatar':97.0,'Kuwait':106.3,'Bahrain':78.3,'Oman':79.3,
+  'Iraq':59.7,'Jordan':72.4,'Lebanon':58.0,'Syria':30.7,'Yemen':null,
+  'Egypt':39.0,'Libya':61.9,'Algeria':45.5,'Morocco':69.6,'Tunisia':49.7,'Sudan':36.6,
+  'Nigeria':58.0,'Kenya':61.2,'Ethiopia':44.8,'Ghana':58.6,'Tanzania':52.6,'South Africa':79.1,
+  'Senegal':60.7,'Ivory Coast':64.4,'Mozambique':55.4,'Angola':43.7,'DR Congo':67.3,'Uganda':53.1,
+  'Cameroon':55.3,'Zambia':51.0,
+  'India':44.4,'Pakistan':42.3,'Bangladesh':52.7,'Sri Lanka':44.2,
+  'Indonesia':53.3,'Malaysia':57.9,'Vietnam':48.7,'Philippines':62.3,'Thailand':55.2,'Singapore':95.6,'Myanmar':38.0,
+  'China':97.9,'Japan':142.5,'South Korea':114.6,
+  'United Kingdom':140.5,'France':128.5,'Germany':131.6,'Spain':110.7,'Italy':115.7,'Netherlands':137.5,
+  'Poland':70.7,'Greece':97.5,'Turkey':48.6,'Romania':62.4,
+  'United States':158.5,'Canada':149.1,'Mexico':77.7,
+  'Brazil':69.8,'Argentina':63.2,'Chile':88.3,'Colombia':55.7,'Peru':70.8,
+  'Australia':168.6,'New Zealand':163.2,
+  'Kazakhstan':48.0,'Uzbekistan':38.7,
+};
+
 const CURRENCIES = ['USD','EUR','GBP','AED','SAR','QAR','KWD','OMR','BHD','EGP','NGN','INR','PKR','IDR','MYR','THB','PHP','VND','CNY','JPY','KRW','TRY','ZAR','BRL','MXN','AUD'];
 
 /* ============================= STATE ============================= */
 
 let quotations = [];      // {id, country, subcontractor, currency, date, rates:{code:rate}, notes}
 let customCountries = []; // same shape as BASE_COUNTRIES
-let settings = {defaultInflation:3, inflationRates:{}, costFactors:{}, referenceBasket: DEFAULT_REFERENCE_BASKET.slice()};
+let settings = {defaultInflation:3, inflationRates:{}, costFactors:{}, referenceBasket: DEFAULT_REFERENCE_BASKET.slice(), benchmarkAdjust:{}};
 
 function currentBasket(){
   return (settings.referenceBasket && settings.referenceBasket.length) ? settings.referenceBasket : DEFAULT_REFERENCE_BASKET;
@@ -422,6 +444,10 @@ let editingQuoteId = null;
 let genState = {country:'', targetDate: new Date().toISOString().slice(0,10), siteAccess:'standard', qty:{}, overrides:{}};
 let selectedMapCountry = null;
 let mapMode = 'basket'; // 'basket' | 'single'
+let benchmarkTarget = '';      // country currently being benchmarked ('' = none)
+let benchmarkTargetArea = '';  // area/city within the target country ('' = country level)
+let benchmarkSource = '';      // '' = auto (nearest country with data)
+let benchmarkSourceArea = '';  // '' = auto (default source area within same country)
 let mapSingleItem = 'BOR-B';
 
 function allCountries(){ return BASE_COUNTRIES.concat(customCountries); }
@@ -566,6 +592,38 @@ function computeCountryIndex(country, targetDate){
   return { value: count? total : null, coverage: `${count}/${currentBasket().length}`, source: overall };
 }
 
+/* ============================= TARGETED BENCHMARKING ============================= */
+
+function countriesWithDirectData(){
+  const set = new Set(quotations.map(q=>q.country));
+  return allCountries().filter(c=>set.has(c.name));
+}
+function haversineKm(a, b){
+  const R=6371, toR=x=>x*Math.PI/180;
+  const dLat=toR(b.lat-a.lat), dLon=toR(b.lon-a.lon);
+  const h=Math.sin(dLat/2)**2 + Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function nearestSourceFor(targetName){
+  const target = getCountryMeta(targetName);
+  if(!target) return null;
+  const pool = countriesWithDirectData().filter(c=>c.name!==targetName);
+  if(!pool.length) return null;
+  pool.sort((x,y)=>haversineKm(target,x)-haversineKm(target,y));
+  return pool[0].name;
+}
+function defaultAdjustPct(targetName, sourceName){
+  const t = PRICE_LEVEL[targetName], s = PRICE_LEVEL[sourceName];
+  if(t==null || s==null || !s) return null;
+  return (t/s - 1) * 100;
+}
+function getBenchmarkAdjust(targetName, sourceName){
+  const key = targetName + '|' + sourceName;
+  if(settings.benchmarkAdjust && settings.benchmarkAdjust[key]!==undefined) return {pct: settings.benchmarkAdjust[key], custom:true};
+  const d = defaultAdjustPct(targetName, sourceName);
+  return {pct: d!=null ? Math.round(d*10)/10 : 0, custom:false, noRef: d==null};
+}
+
 /* ============================= RENDER: SHELL ============================= */
 
 document.getElementById('tabs').addEventListener('click', e=>{
@@ -617,10 +675,158 @@ function hexToRgb(hex){
   return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
 }
 
+function areasWithData(country){
+  const seen = new Map(); // areaLower -> {area, latestDate}
+  quotations.filter(q=>q.country===country).forEach(q=>{
+    const a = (q.area||'').trim();
+    const key = a.toLowerCase();
+    const d = q.date;
+    if(!seen.has(key) || new Date(d) > new Date(seen.get(key).latestDate)) seen.set(key, {area: a, latestDate: d});
+  });
+  return [...seen.values()].sort((x,y)=> new Date(y.latestDate)-new Date(x.latestDate));
+}
+function latestDirectInArea(country, area, code){
+  const key = (area||'').trim().toLowerCase();
+  const list = quotations.filter(q=>q.country===country && ((q.area||'').trim().toLowerCase())===key
+    && q.rates && q.rates[code]!==undefined && q.rates[code]!=='' && q.rates[code]!==null);
+  if(!list.length) return null;
+  list.sort((a,b)=> new Date(b.date) - new Date(a.date));
+  return list[0];
+}
+function areaAdjustKey(country, targetArea, sourceArea){
+  return 'AREA|' + country + '|' + targetArea.toLowerCase() + '|' + sourceArea.toLowerCase();
+}
+
+function renderBenchmarkPanel(today){
+  if(!benchmarkTarget) return '';
+  const target = benchmarkTarget;
+  const tArea = benchmarkTargetArea.trim();
+  const countryAreas = areasWithData(target);
+  const hasCountryData = countryAreas.length > 0;
+
+  const areaInput = `<div class="row3" style="align-items:end; margin:8px 0 4px;">
+    <div><label>Area / City to benchmark (optional)</label>
+      <input id="bm-target-area" value="${benchmarkTargetArea}" placeholder="e.g. Jeddah" list="bm-area-list">
+      <datalist id="bm-area-list">${countryAreas.map(a=>`<option value="${a.area}">`).join('')}</datalist>
+    </div>
+    <div class="small muted" style="grid-column:span 2; padding-bottom:8px;">Priority: same city → another city in ${target} you choose → nearest country. Press Enter or click away after typing.</div>
+  </div>`;
+
+  // ---------- TIER 1: exact area match ----------
+  if(tArea && hasCountryData){
+    const exact = countryAreas.find(a=>a.area.toLowerCase()===tArea.toLowerCase());
+    if(exact){
+      let rows='';
+      BOQ.forEach(it=>{
+        const rec = latestDirectInArea(target, exact.area, it.code);
+        if(!rec) return;
+        const raw = parseFloat(rec.rates[it.code]);
+        const adj = adjustedValueOf(rec, it.code, target, today);
+        rows += `<tr><td>${it.code} — ${it.label}</td><td class="num">${raw.toFixed(2)}</td><td class="small muted">${rec.date}</td><td class="num">${adj.toFixed(2)}</td></tr>`;
+      });
+      return `<div class="panel" style="margin-top:16px; border-color: var(--amber);">
+        <div class="flex-between"><h2 style="border:none;margin:0;padding:0;">Benchmark — ${target} · ${exact.area||'(no area)'}</h2>
+          <span class="badge direct">same city · own quotation</span></div>
+        ${areaInput}
+        <p class="small muted">Basis: your own quotation(s) logged for ${exact.area||'this area'} (most recent: ${exact.latestDate}), escalated to today at ${inflationFor(target).toFixed(1)}%/yr.</p>
+        <div style="max-height:340px; overflow:auto;">
+        <table><thead><tr><th>Item</th><th class="num">Quoted rate</th><th>As of</th><th class="num">Escalated to today</th></tr></thead><tbody>${rows}</tbody></table>
+        </div>
+      </div>`;
+    }
+  }
+
+  // ---------- TIER 2: same country, different area ----------
+  if(hasCountryData){
+    const srcArea = (benchmarkSourceArea && countryAreas.some(a=>a.area.toLowerCase()===benchmarkSourceArea.toLowerCase()))
+      ? countryAreas.find(a=>a.area.toLowerCase()===benchmarkSourceArea.toLowerCase()).area
+      : countryAreas[0].area; // default: area with the most recent quotation
+    const akey = areaAdjustKey(target, tArea||'(country level)', srcArea||'(no area)');
+    const savedPct = (settings.benchmarkAdjust && settings.benchmarkAdjust[akey]!==undefined) ? settings.benchmarkAdjust[akey] : 0;
+    let rows='';
+    BOQ.forEach(it=>{
+      const rec = latestDirectInArea(target, srcArea, it.code);
+      if(!rec) return;
+      const srcAdj = adjustedValueOf(rec, it.code, target, today);
+      const bench = srcAdj * (1 + savedPct/100);
+      rows += `<tr><td>${it.code} — ${it.label}</td><td class="num">${srcAdj.toFixed(2)}</td><td class="num" style="color:var(--amber);">${bench.toFixed(2)}</td></tr>`;
+    });
+    return `<div class="panel" style="margin-top:16px; border-color: var(--amber);">
+      <div class="flex-between"><h2 style="border:none;margin:0;padding:0;">Benchmark — ${target}${tArea?' · '+tArea:''}</h2>
+        <span class="badge regional">same country · from ${srcArea||'(no area recorded)'}</span></div>
+      ${areaInput}
+      <div class="row3" style="align-items:end; margin: 4px 0;">
+        <div><label>Source city/area in ${target} (pick the nearest to ${tArea||'your project'})</label>
+          <select id="bm-source-area">${countryAreas.map(a=>`<option value="${a.area}" ${a.area===srcArea?'selected':''}>${a.area||'(no area recorded)'} — latest ${a.latestDate}</option>`).join('')}</select>
+        </div>
+        <div><label>Price difference: ${tArea||'target'} vs ${srcArea||'source'} (%)</label>
+          <input type="number" step="0.5" id="bm-area-pct" value="${savedPct}">
+        </div>
+        <div class="small muted" style="padding-bottom:6px;">Default 0% (same country). Add a % only if you judge the target area runs costlier/cheaper (remote logistics, permits, city congestion). Your value is saved for this city pair. Cities have no coordinates in the tool, so pick the nearest source yourself — default is simply the most recently quoted area.</div>
+      </div>
+      <p class="small muted">Rates below = ${srcArea||'source area'} rates escalated to today at ${inflationFor(target).toFixed(1)}%/yr, adjusted by ${savedPct>=0?'+':''}${savedPct}%.</p>
+      <div style="max-height:340px; overflow:auto;">
+      <table><thead><tr><th>Item</th><th class="num">${srcArea||'Source'} rate (today)</th><th class="num">${tArea||target} benchmark</th></tr></thead><tbody>${rows||'<tr><td colspan=3 class="small muted">No item rates logged for that source area.</td></tr>'}</tbody></table>
+      </div>
+    </div>`;
+  }
+
+  // ---------- TIER 3: no data in the country → nearest quoted country ----------
+  const pool = countriesWithDirectData();
+  if(!pool.length){
+    return `<div class="panel" style="margin-top:16px;">${areaInput}<p class="small muted">No quotations logged anywhere yet — nothing to benchmark ${target} against. Add a quotation first.</p></div>`;
+  }
+  const autoSource = nearestSourceFor(target);
+  const source = (benchmarkSource && pool.some(c=>c.name===benchmarkSource)) ? benchmarkSource : autoSource;
+  const adj = getBenchmarkAdjust(target, source);
+  const tMeta = getCountryMeta(target), sMeta = getCountryMeta(source);
+  const distKm = (tMeta&&sMeta)? Math.round(haversineKm(tMeta,sMeta)) : null;
+  const dflt = defaultAdjustPct(target, source);
+
+  let rows='';
+  BOQ.forEach(it=>{
+    const rec = latestDirect(source, it.code);
+    if(!rec) return;
+    const srcAdj = adjustedValueOf(rec, it.code, source, today);
+    const bench = srcAdj * (1 + adj.pct/100);
+    rows += `<tr><td>${it.code} — ${it.label}</td><td class="num">${srcAdj.toFixed(2)}</td><td class="num" style="color:var(--amber);">${bench.toFixed(2)}</td></tr>`;
+  });
+
+  return `<div class="panel" style="margin-top:16px; border-color: var(--amber);">
+    <div class="flex-between"><h2 style="border:none;margin:0;padding:0;">Benchmark — ${target}${tArea?' · '+tArea:''}</h2>
+      <span class="badge regional">from ${source}</span></div>
+    ${areaInput}
+    <div class="row3" style="align-items:end; margin: 4px 0;">
+      <div><label>Source country (default: nearest with data${distKm!=null?', '+distKm+' km':''})</label>
+        <select id="bm-source">${pool.map(c=>`<option value="${c.name}" ${c.name===source?'selected':''}>${c.name}</option>`).join('')}</select>
+      </div>
+      <div><label>Price difference: ${target} vs ${source} (%)</label>
+        <input type="number" step="0.5" id="bm-pct" value="${adj.pct}">
+      </div>
+      <div class="small muted" style="padding-bottom:6px;">
+        ${dflt!=null
+          ? `World Bank ICP price levels (2021): ${target} ${PRICE_LEVEL[target]} vs ${source} ${PRICE_LEVEL[source]} → default ${dflt>=0?'+':''}${dflt.toFixed(1)}%. ${adj.custom?'You are using a custom value — <a class=\"linklike\" id=\"bm-reset\">reset to default</a>.':'Edit the % to override; your value is saved for this country pair.'}`
+          : `No World Bank price-level reference for this pair — set the % from your own judgment.`}
+      </div>
+    </div>
+    <p class="small muted">No quotation exists anywhere in ${target}. Rates below = ${source}'s quoted rates escalated to today at ${inflationFor(source).toFixed(1)}%/yr, then adjusted by ${adj.pct>=0?'+':''}${adj.pct}%. The World Bank default reflects whole-economy price levels, not geotechnical works specifically — treat it as a starting point.</p>
+    <div style="max-height:340px; overflow:auto;">
+    <table><thead><tr><th>Item</th><th class="num">${source} rate (today)</th><th class="num">${target} benchmark</th></tr></thead><tbody>${rows||'<tr><td colspan=3 class="small muted">The source country has no item rates logged.</td></tr>'}</tbody></table>
+    </div>
+  </div>`;
+}
+
 function renderDashboard(){
   const today = new Date().toISOString().slice(0,10);
   const countries = allCountries();
-  const indices = countries.map(c=>({...c, idx: computeCountryIndex(c.name, today)}));
+  const indices = countries.map(c=>{
+    const idx = computeCountryIndex(c.name, today);
+    if(idx.source!=='direct'){
+      // Map shows only real logged data; benchmarking is per-country via the selector below
+      return {...c, idx:{value:null, coverage:idx.coverage, source: idx.source==='none'?'none':'suppressed'}};
+    }
+    return {...c, idx};
+  });
   const withData = indices.filter(c=>c.idx.value!=null);
   const values = withData.map(c=>c.idx.value);
   const min = values.length? Math.min(...values): 0;
@@ -640,10 +846,12 @@ function renderDashboard(){
     const r = hasAny ? 7 + 5*( (c.idx.value-min)/((max-min)||1) ) : 6;
     const dash = c.idx.source==='direct' ? '' : (hasAny ? 'stroke-dasharray="3,2"' : 'stroke-dasharray="2,2"');
     const fill = hasAny ? color : 'none';
+    const isTarget = c.name===benchmarkTarget;
     markers += `<g class="marker" data-country="${c.name}" transform="translate(${x},${y})">
+      ${isTarget?`<circle r="${r+7}" fill="none" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.9"/>`:''}
       <line x1="-9" y1="0" x2="9" y2="0" stroke="${hasAny?color:'#5a6a6a'}" stroke-width="1" opacity="0.55"/>
       <line x1="0" y1="-9" x2="0" y2="9" stroke="${hasAny?color:'#5a6a6a'}" stroke-width="1" opacity="0.55"/>
-      <circle r="${r}" fill="${fill}" stroke="${hasAny?'#eaf2fa':'#5a6a6a'}" stroke-width="1.4" ${dash} opacity="0.92"/>
+      <circle r="${r}" fill="${fill}" stroke="${hasAny?'#eaf2fa':(isTarget?'var(--amber)':'#5a6a6a')}" stroke-width="1.4" ${dash} opacity="0.92"/>
       <title>${c.name} — ${hasAny? '$'+c.idx.value.toFixed(0)+(mapMode==='single'?' est. rate ('+c.idx.source+')':' ref. index ('+c.idx.source+')') : 'no data yet'}</title>
     </g>`;
   });
@@ -685,7 +893,7 @@ function renderDashboard(){
       <p class="small muted">Reference basket: ${currentBasket().map(b=>{const it=BOQ.find(x=>x.code===b.code); return `${b.qty} ${it?it.label:b.code}`;}).join(' · ')}
       &nbsp;<a class="linklike" data-goto="settings">(edit basket)</a></p>
       <table><thead><tr><th>Item</th><th class="num">Est. rate</th><th>Source</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="totals-line grand"><span>Reference index (today)</span><span>${selected.idx.value!=null? '$'+selected.idx.value.toFixed(0) : 'No data anywhere'}</span></div>
+      <div class="totals-line grand"><span>Reference index (today)</span><span>${(()=>{const full=computeCountryIndex(selected.name, today); return full.value!=null? '$'+full.value.toFixed(0)+(selected.idx.value==null?' (derived — not on map; use Benchmark for a proper estimate)':'') : 'No data anywhere';})()}</span></div>
     </div>`;
     }
   }
@@ -696,12 +904,16 @@ function renderDashboard(){
     <div class="panel">
       <div class="flex-between">
         <h2 style="border:none;margin:0;padding:0;">Global Rate Coverage ${mapMode==='single' ? '— Single Item' : '— Reference Basket Index'} ${mapMode==='basket'?`<a class="linklike small" data-goto="settings" style="font-size:11px;">(edit basket)</a>`:''}</h2>
-        <div class="small muted">${withData.length}/${countries.length} countries with usable pricing (direct or derived) · index date ${today}</div>
+        <div class="small muted">${withData.length}/${countries.length} countries with direct quotations · index date ${today}</div>
       </div>
       <div class="flex-between" style="margin: 10px 0; gap:14px;">
-        <div style="display:flex; gap:6px;">
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
           <button class="btn ${mapMode==='basket'?'':'ghost'}" id="mode-basket" style="padding:6px 12px;">Composite basket</button>
           <button class="btn ${mapMode==='single'?'':'ghost'}" id="mode-single" style="padding:6px 12px;">Single item</button>
+          <select id="benchmark-select" style="width:auto; min-width:220px;" title="Benchmark one country at a time: from its own quotation (inflation-adjusted) if you have one, otherwise from the nearest quoted country with an adjustable price-difference %.">
+            <option value="">Benchmark a country…</option>
+            ${allCountries().map(c=>c.name).sort().map(n=>`<option value="${n}" ${benchmarkTarget===n?'selected':''}>${n}</option>`).join('')}
+          </select>
         </div>
         ${mapMode==='single' ? `<div style="flex:1; max-width:420px;"><select id="single-item-select">${itemOptions}</select></div>` : ''}
       </div>
@@ -720,9 +932,10 @@ function renderDashboard(){
           &nbsp;&nbsp;<span class="legend-swatch" style="background:${colorForValue(max,min,max)}"></span> higher cost
           &nbsp;&nbsp;<span class="legend-swatch" style="background:#5a6a6a;"></span> no data yet
         </div>
-        <div class="small muted">Solid ring = direct quotation on file · dashed ring = derived (regional/global) estimate</div>
+        <div class="small muted">Map shows your logged quotations only · pick a country in “Benchmark a country…” to price it from its own history or from the nearest quoted country</div>
       </div>
     </div>
+    ${renderBenchmarkPanel(today)}
     ${detailPanel}
     ${!quotations.length ? `<div class="panel" style="margin-top:16px;"><div class="empty-state"><div class="big">No quotations logged yet</div>
       Add your first quotation in the <a class="linklike" data-goto="quotations">Quotation Log</a> tab to start populating the map.</div></div>` : ''}
@@ -752,7 +965,7 @@ function renderQuotations(){
     const n = Object.keys(q.rates||{}).length;
     const accessLabel = (SITE_ACCESS.find(a=>a.key===q.siteAccess)||SITE_ACCESS[0]).label;
     return `<tr>
-      <td>${q.country}</td><td>${q.date}</td><td>${q.currency}</td><td>${q.subcontractor||'—'}</td>
+      <td>${q.country}${q.area?` <span class="small muted">· ${q.area}</span>`:''}</td><td>${q.date}</td><td>${q.currency}</td><td>${q.subcontractor||'—'}</td>
       <td class="small">${accessLabel}</td>
       <td class="num">${n} items</td>
       <td><a class="linklike" data-edit-quote="${q.id}">Edit</a> &nbsp;·&nbsp; <a class="linklike" data-del-quote="${q.id}">Delete</a></td>
@@ -763,11 +976,12 @@ function renderQuotations(){
   <div class="grid" style="grid-template-columns: 1.1fr 1.4fr;">
     <div class="panel">
       <h2>${editing? 'Edit Quotation':'Add Quotation'}</h2>
-      <div class="row3">
+      <div class="row4">
         <div><label>Country</label>
           <input list="country-list" id="q-country" value="${editing? editing.country:''}" placeholder="Select or type new">
           <datalist id="country-list">${countries.map(c=>`<option value="${c}">`).join('')}</datalist>
         </div>
+        <div><label>Area / City</label><input id="q-area" value="${editing? (editing.area||''):''}" placeholder="e.g. Doha, NEOM, Red Sea coast"></div>
         <div><label>Date of quotation</label><input type="date" id="q-date" value="${editing? editing.date : new Date().toISOString().slice(0,10)}"></div>
         <div><label>Currency</label>
           <select id="q-currency">${CURRENCIES.map(c=>`<option ${editing&&editing.currency===c?'selected':''}>${c}</option>`).join('')}</select>
@@ -1151,6 +1365,40 @@ function attachHandlers(){
     if(modeSingleBtn) modeSingleBtn.addEventListener('click', ()=>{ mapMode='single'; render(); });
     const itemSelect = document.getElementById('single-item-select');
     if(itemSelect) itemSelect.addEventListener('change', ()=>{ mapSingleItem = itemSelect.value; render(); });
+    const bmSelect = document.getElementById('benchmark-select');
+    if(bmSelect) bmSelect.addEventListener('change', ()=>{ benchmarkTarget = bmSelect.value; benchmarkSource=''; benchmarkSourceArea=''; benchmarkTargetArea=''; render(); });
+    const bmTargetArea = document.getElementById('bm-target-area');
+    if(bmTargetArea) bmTargetArea.addEventListener('change', ()=>{ benchmarkTargetArea = bmTargetArea.value; render(); });
+    const bmSourceArea = document.getElementById('bm-source-area');
+    if(bmSourceArea) bmSourceArea.addEventListener('change', ()=>{ benchmarkSourceArea = bmSourceArea.value; render(); });
+    const bmAreaPct = document.getElementById('bm-area-pct');
+    if(bmAreaPct) bmAreaPct.addEventListener('change', async ()=>{
+      const srcSel = document.getElementById('bm-source-area');
+      const srcArea = srcSel ? srcSel.value : '';
+      if(!benchmarkTarget) return;
+      if(!settings.benchmarkAdjust) settings.benchmarkAdjust = {};
+      settings.benchmarkAdjust[areaAdjustKey(benchmarkTarget, (benchmarkTargetArea.trim()||'(country level)'), (srcArea||'(no area)'))] = parseFloat(bmAreaPct.value) || 0;
+      await saveSettings();
+      render();
+    });
+    const bmSource = document.getElementById('bm-source');
+    if(bmSource) bmSource.addEventListener('change', ()=>{ benchmarkSource = bmSource.value; render(); });
+    const bmPct = document.getElementById('bm-pct');
+    if(bmPct) bmPct.addEventListener('change', async ()=>{
+      const src = document.getElementById('bm-source') ? document.getElementById('bm-source').value : '';
+      if(!benchmarkTarget || !src) return;
+      if(!settings.benchmarkAdjust) settings.benchmarkAdjust = {};
+      settings.benchmarkAdjust[benchmarkTarget + '|' + src] = parseFloat(bmPct.value) || 0;
+      await saveSettings();
+      render();
+    });
+    const bmReset = document.getElementById('bm-reset');
+    if(bmReset) bmReset.addEventListener('click', async ()=>{
+      const src = document.getElementById('bm-source') ? document.getElementById('bm-source').value : '';
+      if(settings.benchmarkAdjust) delete settings.benchmarkAdjust[benchmarkTarget + '|' + src];
+      await saveSettings();
+      render();
+    });
   }
 
   if(currentTab==='quotations'){
@@ -1160,6 +1408,7 @@ function attachHandlers(){
       if(!country){ alert('Enter a country.'); return; }
       const date = document.getElementById('q-date').value;
       const currency = document.getElementById('q-currency').value;
+      const area = document.getElementById('q-area').value.trim();
       const subcontractor = document.getElementById('q-sub').value.trim();
       const notes = document.getElementById('q-notes').value.trim();
       const siteAccess = document.getElementById('q-access').value;
@@ -1173,9 +1422,9 @@ function attachHandlers(){
       }
       if(editingQuoteId!=null){
         const q = quotations.find(x=>x.id===editingQuoteId);
-        Object.assign(q, {country,date,currency,subcontractor,notes,siteAccess,rates});
+        Object.assign(q, {country,area,date,currency,subcontractor,notes,siteAccess,rates});
       } else {
-        quotations.push({id: Date.now(), country, date, currency, subcontractor, notes, siteAccess, rates});
+        quotations.push({id: Date.now(), country, area, date, currency, subcontractor, notes, siteAccess, rates});
       }
       editingQuoteId = null;
       await saveQuotations();

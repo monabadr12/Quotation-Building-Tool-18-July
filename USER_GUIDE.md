@@ -28,6 +28,10 @@ gets logged here.
    - **Country** — type or pick from the list. If the country isn't there yet,
      just type its name; it will be added automatically as a basic entry (you can
      refine its region/coordinates later in Settings).
+   - **Area / City** — where within the country the quotation applies (e.g.
+     Doha, NEOM, Red Sea coast). Useful when the same country has different
+     pricing by area; it's shown alongside the country in the log and in the
+     benchmark panel.
    - **Date of quotation** — the date the subcontractor actually issued the rates
      (not today's date, unless that's when you received it).
    - **Currency** — the currency the rates are actually in.
@@ -64,6 +68,29 @@ crosshair-and-circle symbol (styled like a borehole location symbol):
 - **Grey hollow circle** = no data anywhere for that country yet
 - **Color** (teal → amber → red) = relative cost, low to high
 - **Size** = same, larger circle = higher estimated cost
+
+**Benchmarking (one country at a time):** the map itself shows **only countries
+where you have logged a real quotation**. To price a country, pick it from the
+**"Benchmark a country…"** dropdown above the map. A benchmark panel opens below:
+
+You can also type an **Area / City to benchmark** (e.g. Jeddah). The panel then
+works through a strict priority order:
+
+1. **Same city** — if a quotation exists for that exact city, it's used directly
+   (inflation-adjusted to today). Highest priority.
+2. **Another city in the same country** — e.g. you need Jeddah but only have
+   Riyadh and Dammam quotations: the panel lists the cities that have data and
+   lets you pick the nearest one yourself (cities are stored as text, so the tool
+   can't measure distances between them — the default is simply the most recently
+   quoted city). An optional % adjustment between the two cities (default 0%)
+   lets you load for remote logistics, permits, or congestion; your % is saved
+   for that city pair.
+3. **No data in the country at all** — the panel prices it from the **nearest
+   country with data** (switchable from a dropdown). The price difference
+   defaults to the ratio of the two countries' **World Bank ICP price level
+   indices** (shown openly in the panel), and you can type your own % instead —
+   remembered for that country pair. A note reminds you the World Bank figure
+   reflects the whole economy, not geotechnical works specifically.
 
 **Two ways to view the map:**
 
