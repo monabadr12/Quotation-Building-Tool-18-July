@@ -5,6 +5,7 @@
 <title>SI Rate Book — Geotechnical Quotation Tool</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
   :root{
     --bg: #000000;
@@ -444,6 +445,7 @@ let editingQuoteId = null;
 let genState = {country:'', targetDate: new Date().toISOString().slice(0,10), siteAccess:'standard', qty:{}, overrides:{}};
 let selectedMapCountry = null;
 let mapMode = 'basket'; // 'basket' | 'single'
+let mapView = {x:0, y:0, w:1000, h:500}; // current SVG viewBox (zoom/pan)
 let benchmarkTarget = '';      // country currently being benchmarked ('' = none)
 let benchmarkTargetArea = '';  // area/city within the target country ('' = country level)
 let benchmarkSource = '';      // '' = auto (nearest country with data)
@@ -529,8 +531,12 @@ function latestDirect(country, code){
   list.sort((a,b)=> new Date(b.date) - new Date(a.date));
   return list[0];
 }
+function toUSD(rec, rate){
+  const fx = parseFloat(rec.fxToUSD);
+  return (fx && fx>0) ? rate/fx : rate; // fx = units of quotation currency per 1 USD; missing fx => treated as USD
+}
 function adjustedValueOf(rec, code, country, targetDate){
-  const rate = parseFloat(rec.rates[code]);
+  const rate = toUSD(rec, parseFloat(rec.rates[code]));
   const yrs = Math.max(0, yearsBetween(rec.date, targetDate));
   const infl = inflationFor(country);
   return rate * Math.pow(1 + infl/100, yrs);
@@ -697,6 +703,145 @@ function areaAdjustKey(country, targetArea, sourceArea){
   return 'AREA|' + country + '|' + targetArea.toLowerCase() + '|' + sourceArea.toLowerCase();
 }
 
+// Compute the benchmark rates for the current target/area selection.
+// Mirrors exactly the 3-tier logic shown in the benchmark panel.
+function computeBenchmarkRates(today){
+  if(!benchmarkTarget) return null;
+  const target = benchmarkTarget;
+  const tArea = benchmarkTargetArea.trim();
+  const countryAreas = areasWithData(target);
+
+  if(tArea && countryAreas.length){
+    const exact = countryAreas.find(a=>a.area.toLowerCase()===tArea.toLowerCase());
+    if(exact){
+      const rates = {};
+      BOQ.forEach(it=>{
+        const rec = latestDirectInArea(target, exact.area, it.code);
+        if(rec) rates[it.code] = adjustedValueOf(rec, it.code, target, today);
+      });
+      return {rates, basis:`Own quotation — ${target} / ${exact.area||'(no area)'} (latest ${exact.latestDate}), escalated to ${today} at ${inflationFor(target).toFixed(1)}%/yr. All values USD.`};
+    }
+  }
+  if(countryAreas.length){
+    const srcArea = (benchmarkSourceArea && countryAreas.some(a=>a.area.toLowerCase()===benchmarkSourceArea.toLowerCase()))
+      ? countryAreas.find(a=>a.area.toLowerCase()===benchmarkSourceArea.toLowerCase()).area
+      : countryAreas[0].area;
+    const akey = areaAdjustKey(target, tArea||'(country level)', srcArea||'(no area)');
+    const pct = (settings.benchmarkAdjust && settings.benchmarkAdjust[akey]!==undefined) ? settings.benchmarkAdjust[akey] : 0;
+    const rates = {};
+    BOQ.forEach(it=>{
+      const rec = latestDirectInArea(target, srcArea, it.code);
+      if(rec) rates[it.code] = adjustedValueOf(rec, it.code, target, today) * (1 + pct/100);
+    });
+    return {rates, basis:`Benchmarked — ${target}${tArea?' / '+tArea:''} from ${srcArea||'(no area)'} rates escalated to ${today} at ${inflationFor(target).toFixed(1)}%/yr, adjusted ${pct>=0?'+':''}${pct}%. All values USD.`};
+  }
+  const pool = countriesWithDirectData();
+  if(!pool.length) return null;
+  const autoSource = nearestSourceFor(target);
+  const source = (benchmarkSource && pool.some(c=>c.name===benchmarkSource)) ? benchmarkSource : autoSource;
+  const adj = getBenchmarkAdjust(target, source);
+  const rates = {};
+  BOQ.forEach(it=>{
+    const rec = latestDirect(source, it.code);
+    if(rec) rates[it.code] = adjustedValueOf(rec, it.code, source, today) * (1 + adj.pct/100);
+  });
+  return {rates, basis:`Benchmarked — ${target}${tArea?' / '+tArea:''} from ${source} rates escalated to ${today} at ${inflationFor(source).toFixed(1)}%/yr, adjusted ${adj.pct>=0?'+':''}${adj.pct}% (World Bank ICP default${adj.custom?' overridden by user':''}). All values USD.`};
+}
+
+// Sheet layout matching the original BOQ workbook (one sheet per section + total)
+const BOQ_SHEETS = [
+  {sheet:'General',        section:'General',                     totalDesc:'General'},
+  {sheet:'Boring',         section:'Boring and Sampling',         totalDesc:'Boring and Sampling'},
+  {sheet:'Exploratory',    section:'Exploratory Excavations',     totalDesc:'Exploratory Excavations'},
+  {sheet:'Insitu testing', section:'In-situ Testing',             totalDesc:'Insitu Testing for Geotechnical Purposes'},
+  {sheet:'Groundwater',    section:'Groundwater Monitoring',      totalDesc:'Groundwater Monitoring, Sampling, And In-situ Geo-Hydraulic Testing'},
+  {sheet:'Geophysical',    section:'Geophysical Investigations',  totalDesc:'Geophysical Investigations'},
+  {sheet:'Lab Soil',       section:'Laboratory Soil Testing',     totalDesc:'Laboratory Soil Testing'},
+  {sheet:'Lab Rock',       section:'Laboratory Rock Testing',     totalDesc:'Laboratory Rock Testing'},
+  {sheet:'Chemical',       section:'Laboratory Chemical Testing', totalDesc:'Laboratory Chemical Testing'},
+  {sheet:'Report',         section:'Reporting',                   totalDesc:'Reporting'},
+];
+
+async function exportBenchmarkExcel(){
+  if(typeof ExcelJS === 'undefined'){ alert('Excel library failed to load (no internet?). Try again when online.'); return; }
+  const today = new Date().toISOString().slice(0,10);
+  const bm = computeBenchmarkRates(today);
+  if(!bm){ alert('Select a country to benchmark first.'); return; }
+
+  const wb = new ExcelJS.Workbook();
+  const thin = {style:'thin', color:{argb:'FF9AA5A5'}};
+  const borderAll = {top:thin,left:thin,bottom:thin,right:thin};
+  const headerFont = {name:'Arial', size:10, bold:true};
+  const bodyFont = {name:'Arial', size:10};
+  const subtotalRefs = {}; // sheet -> subtotal cell row
+
+  BOQ_SHEETS.forEach(cfg=>{
+    const ws = wb.addWorksheet(cfg.sheet);
+    ws.columns = [{width:10},{width:44},{width:10},{width:8},{width:12},{width:12}];
+    // Row 1: headers
+    ws.addRow(['Item','Description','Quantity','Unit','Rate','Amount']);
+    ws.getRow(1).eachCell(c=>{ c.font = headerFont; c.border = borderAll; });
+    // Row 2: merged section title
+    ws.addRow([cfg.section]);
+    ws.mergeCells('A2:F2');
+    ws.getCell('A2').font = headerFont;
+    ws.getCell('A2').border = borderAll;
+    // Items
+    const items = BOQ.filter(b=>b.section===cfg.section);
+    let r = 3;
+    items.forEach(it=>{
+      const letter = it.code.split('-')[1]; // e.g. BOR-A1 -> A1
+      const rate = bm.rates[it.code];
+      const row = ws.addRow([letter, it.label, null, it.unit, rate!=null? Math.round(rate*100)/100 : null, null]);
+      row.getCell(6).value = {formula:`E${r}*C${r}`};
+      row.eachCell({includeEmpty:true}, (c,col)=>{ if(col<=6){ c.font = bodyFont; c.border = borderAll; }});
+      row.getCell(5).numFmt = '#,##0.00';
+      row.getCell(6).numFmt = '#,##0.00';
+      r++;
+    });
+    // Sub-total row
+    const st = ws.addRow([null,null,null,null,'Sub-Total',null]);
+    st.getCell(6).value = items.length ? {formula:`SUM(F3:F${r-1})`} : 0;
+    st.getCell(5).font = headerFont; st.getCell(6).font = headerFont;
+    st.getCell(5).border = borderAll; st.getCell(6).border = borderAll;
+    st.getCell(6).numFmt = '#,##0.00';
+    subtotalRefs[cfg.sheet] = r; // subtotal row number
+  });
+
+  // total sheet
+  const tws = wb.addWorksheet('total');
+  tws.columns = [{width:10},{width:56},{width:14}];
+  tws.addRow(['Item','Description','Amount']);
+  tws.getRow(1).eachCell(c=>{ c.font = headerFont; c.border = borderAll; });
+  const letters = 'ABCDEFGHIJ';
+  BOQ_SHEETS.forEach((cfg,i)=>{
+    const sheetRef = cfg.sheet.includes(' ') ? `'${cfg.sheet}'` : cfg.sheet;
+    const row = tws.addRow([letters[i], cfg.totalDesc, null]);
+    row.getCell(3).value = {formula:`${sheetRef}!F${subtotalRefs[cfg.sheet]}`};
+    row.eachCell({includeEmpty:true},(c,col)=>{ if(col<=3){ c.font = bodyFont; c.border = borderAll; }});
+    row.getCell(3).numFmt = '#,##0.00';
+  });
+  const totRow = tws.addRow([null,'Total',null]);
+  totRow.getCell(3).value = {formula:`SUM(C2:C${1+BOQ_SHEETS.length})`};
+  totRow.getCell(2).font = headerFont; totRow.getCell(3).font = headerFont;
+  totRow.getCell(2).border = borderAll; totRow.getCell(3).border = borderAll;
+  totRow.getCell(3).numFmt = '#,##0.00';
+  // Basis note below
+  tws.addRow([]);
+  const note = tws.addRow([null, 'Basis: ' + bm.basis]);
+  note.getCell(2).font = {name:'Arial', size:9, italic:true};
+  const note2 = tws.addRow([null, 'Rates are benchmark estimates generated by SI Rate Book — enter quantities in each sheet; amounts and totals recalculate automatically. Review before use in a bid.']);
+  note2.getCell(2).font = {name:'Arial', size:9, italic:true};
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const areaPart = benchmarkTargetArea.trim() ? '_' + benchmarkTargetArea.trim().replace(/\s+/g,'_') : '';
+  a.href = url; a.download = `BOQ_benchmark_${benchmarkTarget.replace(/\s+/g,'_')}${areaPart}_${today}.xlsx`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
 function renderBenchmarkPanel(today){
   if(!benchmarkTarget) return '';
   const target = benchmarkTarget;
@@ -720,17 +865,18 @@ function renderBenchmarkPanel(today){
       BOQ.forEach(it=>{
         const rec = latestDirectInArea(target, exact.area, it.code);
         if(!rec) return;
-        const raw = parseFloat(rec.rates[it.code]);
+        const raw = toUSD(rec, parseFloat(rec.rates[it.code]));
         const adj = adjustedValueOf(rec, it.code, target, today);
         rows += `<tr><td>${it.code} — ${it.label}</td><td class="num">${raw.toFixed(2)}</td><td class="small muted">${rec.date}</td><td class="num">${adj.toFixed(2)}</td></tr>`;
       });
       return `<div class="panel" style="margin-top:16px; border-color: var(--amber);">
         <div class="flex-between"><h2 style="border:none;margin:0;padding:0;">Benchmark — ${target} · ${exact.area||'(no area)'}</h2>
-          <span class="badge direct">same city · own quotation</span></div>
+          <div style="display:flex; gap:10px; align-items:center;"><span class="badge direct">same city · own quotation</span>
+          <button class="btn ghost" id="bm-excel" style="padding:6px 12px;">Download Excel (BOQ format)</button></div></div>
         ${areaInput}
         <p class="small muted">Basis: your own quotation(s) logged for ${exact.area||'this area'} (most recent: ${exact.latestDate}), escalated to today at ${inflationFor(target).toFixed(1)}%/yr.</p>
         <div style="max-height:340px; overflow:auto;">
-        <table><thead><tr><th>Item</th><th class="num">Quoted rate</th><th>As of</th><th class="num">Escalated to today</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr><th>Item</th><th class="num">Quoted rate (USD)</th><th>As of</th><th class="num">Escalated to today (USD)</th></tr></thead><tbody>${rows}</tbody></table>
         </div>
       </div>`;
     }
@@ -753,7 +899,8 @@ function renderBenchmarkPanel(today){
     });
     return `<div class="panel" style="margin-top:16px; border-color: var(--amber);">
       <div class="flex-between"><h2 style="border:none;margin:0;padding:0;">Benchmark — ${target}${tArea?' · '+tArea:''}</h2>
-        <span class="badge regional">same country · from ${srcArea||'(no area recorded)'}</span></div>
+        <div style="display:flex; gap:10px; align-items:center;"><span class="badge regional">same country · from ${srcArea||'(no area recorded)'}</span>
+        <button class="btn ghost" id="bm-excel" style="padding:6px 12px;">Download Excel (BOQ format)</button></div></div>
       ${areaInput}
       <div class="row3" style="align-items:end; margin: 4px 0;">
         <div><label>Source city/area in ${target} (pick the nearest to ${tArea||'your project'})</label>
@@ -794,7 +941,8 @@ function renderBenchmarkPanel(today){
 
   return `<div class="panel" style="margin-top:16px; border-color: var(--amber);">
     <div class="flex-between"><h2 style="border:none;margin:0;padding:0;">Benchmark — ${target}${tArea?' · '+tArea:''}</h2>
-      <span class="badge regional">from ${source}</span></div>
+      <div style="display:flex; gap:10px; align-items:center;"><span class="badge regional">from ${source}</span>
+      <button class="btn ghost" id="bm-excel" style="padding:6px 12px;">Download Excel (BOQ format)</button></div></div>
     ${areaInput}
     <div class="row3" style="align-items:end; margin: 4px 0;">
       <div><label>Source country (default: nearest with data${distKm!=null?', '+distKm+' km':''})</label>
@@ -838,20 +986,21 @@ function renderDashboard(){
     'North America':[45,-100], 'Latin America':[-15,-62], 'Oceania':[-27,145], 'Central Asia':[46,66]
   };
 
+  const zf = mapView.w / 1000; // zoom factor: keep markers a constant screen size
   let markers = '';
   indices.forEach(c=>{
     const [x,y] = project(c.lat, c.lon);
     const color = colorForValue(c.idx.value, min, max);
     const hasAny = c.idx.value!=null;
-    const r = hasAny ? 7 + 5*( (c.idx.value-min)/((max-min)||1) ) : 6;
+    const r = (hasAny ? 7 + 5*( (c.idx.value-min)/((max-min)||1) ) : 6) * zf;
     const dash = c.idx.source==='direct' ? '' : (hasAny ? 'stroke-dasharray="3,2"' : 'stroke-dasharray="2,2"');
     const fill = hasAny ? color : 'none';
     const isTarget = c.name===benchmarkTarget;
     markers += `<g class="marker" data-country="${c.name}" transform="translate(${x},${y})">
-      ${isTarget?`<circle r="${r+7}" fill="none" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.9"/>`:''}
-      <line x1="-9" y1="0" x2="9" y2="0" stroke="${hasAny?color:'#5a6a6a'}" stroke-width="1" opacity="0.55"/>
-      <line x1="0" y1="-9" x2="0" y2="9" stroke="${hasAny?color:'#5a6a6a'}" stroke-width="1" opacity="0.55"/>
-      <circle r="${r}" fill="${fill}" stroke="${hasAny?'#eaf2fa':(isTarget?'var(--amber)':'#5a6a6a')}" stroke-width="1.4" ${dash} opacity="0.92"/>
+      ${isTarget?`<circle r="${r+7*zf}" fill="none" stroke="var(--amber)" stroke-width="${1.5*zf}" stroke-dasharray="${4*zf},${3*zf}" opacity="0.9"/>`:''}
+      <line x1="${-9*zf}" y1="0" x2="${9*zf}" y2="0" stroke="${hasAny?color:'#5a6a6a'}" stroke-width="${1*zf}" opacity="0.55"/>
+      <line x1="0" y1="${-9*zf}" x2="0" y2="${9*zf}" stroke="${hasAny?color:'#5a6a6a'}" stroke-width="${1*zf}" opacity="0.55"/>
+      <circle r="${r}" fill="${fill}" stroke="${hasAny?'#eaf2fa':(isTarget?'var(--amber)':'#5a6a6a')}" stroke-width="${1.4*zf}" ${dash} opacity="0.92"/>
       <title>${c.name} — ${hasAny? '$'+c.idx.value.toFixed(0)+(mapMode==='single'?' est. rate ('+c.idx.source+')':' ref. index ('+c.idx.source+')') : 'no data yet'}</title>
     </g>`;
   });
@@ -863,7 +1012,7 @@ function renderDashboard(){
   let regionText = '';
   Object.entries(regionLabels).forEach(([name,[lat,lon]])=>{
     const [x,y] = project(lat,lon);
-    regionText += `<text x="${x}" y="${y}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="rgba(220,232,242,0.14)" letter-spacing="2" font-weight="700">${name.toUpperCase()}</text>`;
+    regionText += `<text x="${x}" y="${y}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="${15*zf}" fill="rgba(220,232,242,0.14)" letter-spacing="${2*zf}" font-weight="700">${name.toUpperCase()}</text>`;
   });
 
   const selected = selectedMapCountry ? indices.find(c=>c.name===selectedMapCountry) : null;
@@ -917,8 +1066,13 @@ function renderDashboard(){
         </div>
         ${mapMode==='single' ? `<div style="flex:1; max-width:420px;"><select id="single-item-select">${itemOptions}</select></div>` : ''}
       </div>
-      <div id="map-wrap">
-        <svg id="worldmap" viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+      <div id="map-wrap" style="position:relative;">
+        <div style="position:absolute; top:10px; right:10px; z-index:2; display:flex; flex-direction:column; gap:6px;">
+          <button class="btn ghost" id="zoom-in" style="padding:6px 12px; font-size:15px;">+</button>
+          <button class="btn ghost" id="zoom-out" style="padding:6px 12px; font-size:15px;">−</button>
+          <button class="btn ghost" id="zoom-reset" style="padding:6px 8px; font-size:10px;">Reset</button>
+        </div>
+        <svg id="worldmap" viewBox="${mapView.x} ${mapView.y} ${mapView.w} ${mapView.h}" xmlns="http://www.w3.org/2000/svg" style="cursor:grab; touch-action:none;">
           <rect x="0" y="0" width="1000" height="500" fill="rgba(255,255,255,0.015)"/>
           ${gridLines}
           ${regionText}
@@ -940,6 +1094,29 @@ function renderDashboard(){
     ${!quotations.length ? `<div class="panel" style="margin-top:16px;"><div class="empty-state"><div class="big">No quotations logged yet</div>
       Add your first quotation in the <a class="linklike" data-goto="quotations">Quotation Log</a> tab to start populating the map.</div></div>` : ''}
   `;
+}
+
+/* ============================= EXCHANGE RATES ============================= */
+// Pegged GCC currencies (fixed by law) — offline fallback per 1 USD:
+const PEGGED_FX = { SAR:3.75, AED:3.6725, QAR:3.64, BHD:0.376, OMR:0.3845 };
+
+async function fetchFxForDate(currency, dateStr){
+  const cur = currency.toLowerCase();
+  if(currency==='USD') return {rate:1, source:'USD'};
+  const urls = [
+    `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${dateStr}/v1/currencies/usd.min.json`,
+    `https://${dateStr}.currency-api.pages.dev/v1/currencies/usd.min.json`
+  ];
+  for(const url of urls){
+    try{
+      const res = await fetch(url);
+      if(!res.ok) continue;
+      const data = await res.json();
+      if(data && data.usd && data.usd[cur]!=null) return {rate: data.usd[cur], source:'currency-api · '+dateStr};
+    }catch(e){ /* try next */ }
+  }
+  if(PEGGED_FX[currency]) return {rate: PEGGED_FX[currency], source:'official peg (fixed rate)'};
+  return null;
 }
 
 /* ============================= QUOTATIONS TAB ============================= */
@@ -965,7 +1142,7 @@ function renderQuotations(){
     const n = Object.keys(q.rates||{}).length;
     const accessLabel = (SITE_ACCESS.find(a=>a.key===q.siteAccess)||SITE_ACCESS[0]).label;
     return `<tr>
-      <td>${q.country}${q.area?` <span class="small muted">· ${q.area}</span>`:''}</td><td>${q.date}</td><td>${q.currency}</td><td>${q.subcontractor||'—'}</td>
+      <td>${q.country}${q.area?` <span class="small muted">· ${q.area}</span>`:''}</td><td>${q.date}</td><td>${q.currency}${q.currency!=='USD'&&q.fxToUSD&&q.fxToUSD!==1?` <span class="small muted">@${q.fxToUSD}</span>`:(q.currency!=='USD'?' <span class="badge none" title="No exchange rate set — rates treated as USD; edit this quotation to fix">no FX</span>':'')}</td><td>${q.subcontractor||'—'}</td>
       <td class="small">${accessLabel}</td>
       <td class="num">${n} items</td>
       <td><a class="linklike" data-edit-quote="${q.id}">Edit</a> &nbsp;·&nbsp; <a class="linklike" data-del-quote="${q.id}">Delete</a></td>
@@ -986,6 +1163,12 @@ function renderQuotations(){
         <div><label>Currency</label>
           <select id="q-currency">${CURRENCIES.map(c=>`<option ${editing&&editing.currency===c?'selected':''}>${c}</option>`).join('')}</select>
         </div>
+      </div>
+      <div class="row3" style="margin-top:10px; align-items:end;">
+        <div><label>Exchange rate at quotation date (1 USD = X in the quotation currency)</label>
+          <input type="number" step="0.0001" id="q-fx" value="${editing&&editing.fxToUSD? editing.fxToUSD : ''}" placeholder="e.g. 3.75 for SAR · 1 for USD"></div>
+        <div><button class="btn ghost" id="fetch-fx" type="button">Fetch rate for date</button></div>
+        <div class="small muted" id="fx-status" style="padding-bottom:8px;">All map/benchmark/quote figures are in USD — this rate converts your entered rates. Fetched values are editable; verify before saving.</div>
       </div>
       <div class="row3" style="margin-top:10px;">
         <div style="grid-column:span 2;"><label>Subcontractor</label><input id="q-sub" value="${editing? (editing.subcontractor||''):''}" placeholder="Subcontractor name"></div>
@@ -1143,7 +1326,7 @@ function exportCSV(){
 function itemQuotesFor(country, code){
   return quotations
     .filter(q=>q.country===country && q.rates && q.rates[code]!=null && q.rates[code]!=='')
-    .map(q=>({date:q.date, rate:parseFloat(q.rates[code]), access:q.siteAccess||'standard', sub:q.subcontractor}))
+    .map(q=>({date:q.date, rate:toUSD(q, parseFloat(q.rates[code])), access:q.siteAccess||'standard', sub:q.subcontractor}))
     .sort((a,b)=> new Date(a.date)-new Date(b.date));
 }
 
@@ -1354,9 +1537,56 @@ function attachHandlers(){
   });
 
   if(currentTab==='dashboard'){
+    let dragMoved = false;
     document.querySelectorAll('.marker').forEach(m=>{
-      m.addEventListener('click', ()=>{ selectedMapCountry = m.dataset.country; render(); });
+      m.addEventListener('click', ()=>{ if(dragMoved) return; selectedMapCountry = m.dataset.country; render(); });
     });
+
+    function zoomAt(factor, cx, cy){
+      // cx, cy in viewBox coordinates; keep that point fixed while zooming
+      const newW = Math.min(1000, Math.max(60, mapView.w * factor));
+      const newH = newW / 2;
+      mapView.x = Math.min(Math.max(cx - (cx - mapView.x) * (newW / mapView.w), 0), 1000 - newW);
+      mapView.y = Math.min(Math.max(cy - (cy - mapView.y) * (newH / mapView.h), 0), 500 - newH);
+      mapView.w = newW; mapView.h = newH;
+      render();
+    }
+    const svg = document.getElementById('worldmap');
+    function toViewBox(evt){
+      const rect = svg.getBoundingClientRect();
+      return [ mapView.x + (evt.clientX - rect.left)/rect.width * mapView.w,
+               mapView.y + (evt.clientY - rect.top)/rect.height * mapView.h ];
+    }
+    const zi = document.getElementById('zoom-in');
+    const zo = document.getElementById('zoom-out');
+    const zr = document.getElementById('zoom-reset');
+    if(zi) zi.addEventListener('click', ()=>zoomAt(0.7, mapView.x+mapView.w/2, mapView.y+mapView.h/2));
+    if(zo) zo.addEventListener('click', ()=>zoomAt(1/0.7, mapView.x+mapView.w/2, mapView.y+mapView.h/2));
+    if(zr) zr.addEventListener('click', ()=>{ mapView={x:0,y:0,w:1000,h:500}; render(); });
+    if(svg){
+      svg.addEventListener('wheel', (e)=>{
+        e.preventDefault();
+        const [cx, cy] = toViewBox(e);
+        zoomAt(e.deltaY < 0 ? 0.85 : 1/0.85, cx, cy);
+      }, {passive:false});
+      // drag to pan
+      let dragging=false, startClient=null, startView=null;
+      svg.addEventListener('pointerdown', (e)=>{
+        dragging=true; dragMoved=false; startClient=[e.clientX,e.clientY]; startView={...mapView};
+        svg.setPointerCapture(e.pointerId); svg.style.cursor='grabbing';
+      });
+      svg.addEventListener('pointermove', (e)=>{
+        if(!dragging) return;
+        const rect = svg.getBoundingClientRect();
+        const dx = (e.clientX-startClient[0])/rect.width * mapView.w;
+        const dy = (e.clientY-startClient[1])/rect.height * mapView.h;
+        if(Math.abs(e.clientX-startClient[0])+Math.abs(e.clientY-startClient[1]) > 4) dragMoved=true;
+        mapView.x = Math.min(Math.max(startView.x - dx, 0), 1000 - mapView.w);
+        mapView.y = Math.min(Math.max(startView.y - dy, 0), 500 - mapView.h);
+        svg.setAttribute('viewBox', `${mapView.x} ${mapView.y} ${mapView.w} ${mapView.h}`);
+      });
+      svg.addEventListener('pointerup', ()=>{ dragging=false; svg.style.cursor='grab'; });
+    }
     const closeBtn = document.querySelector('[data-close-detail]');
     if(closeBtn) closeBtn.addEventListener('click', ()=>{ selectedMapCountry=null; render(); });
     const modeBasketBtn = document.getElementById('mode-basket');
@@ -1392,6 +1622,8 @@ function attachHandlers(){
       await saveSettings();
       render();
     });
+    const bmExcel = document.getElementById('bm-excel');
+    if(bmExcel) bmExcel.addEventListener('click', exportBenchmarkExcel);
     const bmReset = document.getElementById('bm-reset');
     if(bmReset) bmReset.addEventListener('click', async ()=>{
       const src = document.getElementById('bm-source') ? document.getElementById('bm-source').value : '';
@@ -1409,6 +1641,15 @@ function attachHandlers(){
       const date = document.getElementById('q-date').value;
       const currency = document.getElementById('q-currency').value;
       const area = document.getElementById('q-area').value.trim();
+      const fxRaw = document.getElementById('q-fx').value;
+      let fxToUSD = parseFloat(fxRaw);
+      if(currency==='USD') fxToUSD = 1;
+      if(!fxToUSD || fxToUSD<=0){
+        if(currency!=='USD'){
+          if(!confirm('No exchange rate entered for a non-USD quotation. Without it the rates will be treated as if they were USD, which will distort all comparisons.\n\nOK = save anyway (treat as USD)\nCancel = go back and set the rate (use “Fetch rate for date”)')) return;
+        }
+        fxToUSD = 1;
+      }
       const subcontractor = document.getElementById('q-sub').value.trim();
       const notes = document.getElementById('q-notes').value.trim();
       const siteAccess = document.getElementById('q-access').value;
@@ -1422,9 +1663,9 @@ function attachHandlers(){
       }
       if(editingQuoteId!=null){
         const q = quotations.find(x=>x.id===editingQuoteId);
-        Object.assign(q, {country,area,date,currency,subcontractor,notes,siteAccess,rates});
+        Object.assign(q, {country,area,date,currency,fxToUSD,subcontractor,notes,siteAccess,rates});
       } else {
-        quotations.push({id: Date.now(), country, area, date, currency, subcontractor, notes, siteAccess, rates});
+        quotations.push({id: Date.now(), country, area, date, currency, fxToUSD, subcontractor, notes, siteAccess, rates});
       }
       editingQuoteId = null;
       await saveQuotations();
@@ -1432,6 +1673,21 @@ function attachHandlers(){
     });
     const cancelBtn = document.getElementById('cancel-edit');
     if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ editingQuoteId=null; render(); });
+    const fetchFxBtn = document.getElementById('fetch-fx');
+    if(fetchFxBtn) fetchFxBtn.addEventListener('click', async ()=>{
+      const cur = document.getElementById('q-currency').value;
+      const d = document.getElementById('q-date').value;
+      const status = document.getElementById('fx-status');
+      if(!d){ status.textContent = 'Set the quotation date first.'; return; }
+      status.textContent = 'Fetching rate…';
+      const r = await fetchFxForDate(cur, d);
+      if(r){
+        document.getElementById('q-fx').value = Math.round(r.rate*10000)/10000;
+        status.textContent = `1 USD = ${Math.round(r.rate*10000)/10000} ${cur} (source: ${r.source}). Editable — verify before saving.`;
+      } else {
+        status.textContent = `Could not fetch a rate for ${cur} on ${d} (date too old, or no internet). Enter it manually — e.g. from your bank record or xe.com historical rates.`;
+      }
+    });
 
     document.querySelectorAll('[data-edit-quote]').forEach(el=>{
       el.addEventListener('click', ()=>{ editingQuoteId = parseInt(el.dataset.editQuote); render(); });

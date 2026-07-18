@@ -35,6 +35,15 @@ gets logged here.
    - **Date of quotation** — the date the subcontractor actually issued the rates
      (not today's date, unless that's when you received it).
    - **Currency** — the currency the rates are actually in.
+   - **Exchange rate at quotation date** — how many units of that currency equal
+     1 USD on the quotation's date (e.g. 3.75 for SAR). Click **"Fetch rate for
+     date"** to fill it automatically from a public historical-rate dataset (GCC
+     pegged currencies also have built-in fixed values); the fetched number is
+     always editable, so verify it before saving. This matters because **all
+     figures on the map, in benchmarks, and in generated quotes are in USD** —
+     the tool converts your entered rates using this number. If a non-USD
+     quotation is saved without a rate, it's flagged "no FX" in the log and its
+     numbers are treated as USD until you edit and fix it.
    - **Subcontractor** — name, for your own reference.
    - **Site access type** — see the box below; this matters for Price Trends.
    - **Notes** — anything else worth remembering about this quote.
@@ -69,6 +78,11 @@ crosshair-and-circle symbol (styled like a borehole location symbol):
 - **Color** (teal → amber → red) = relative cost, low to high
 - **Size** = same, larger circle = higher estimated cost
 
+**Zoom and pan:** use the **+ / − / Reset** buttons in the top-right corner of
+the map, scroll the mouse wheel to zoom toward the cursor, and click-drag to pan
+around when zoomed in. Country markers keep a constant on-screen size at any
+zoom level.
+
 **Benchmarking (one country at a time):** the map itself shows **only countries
 where you have logged a real quotation**. To price a country, pick it from the
 **"Benchmark a country…"** dropdown above the map. A benchmark panel opens below:
@@ -91,6 +105,17 @@ works through a strict priority order:
    indices** (shown openly in the panel), and you can type your own % instead —
    remembered for that country pair. A note reminds you the World Bank figure
    reflects the whole economy, not geotechnical works specifically.
+
+**Download Excel (BOQ format):** every benchmark panel has a button that
+generates a full Excel workbook in the exact layout of the original BOQ
+template — one sheet per section (General, Boring, Exploratory, Insitu testing,
+Groundwater, Geophysical, Lab Soil, Lab Rock, Chemical, Report) plus a "total"
+summary sheet. The benchmark rates (USD) are filled into the Rate column;
+quantities are left blank for you to enter per project, and all Amount, Sub-Total
+and grand-total formulas are live, so the workbook recalculates as you type
+quantities in Excel. Items without a benchmark rate stay blank. The basis of the
+benchmark (source city/country, escalation, adjustment %) is written at the
+bottom of the "total" sheet so the file is self-documenting.
 
 **Two ways to view the map:**
 
