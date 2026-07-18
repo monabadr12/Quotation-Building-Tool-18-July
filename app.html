@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SI Rate Book — Geotechnical Quotation Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #000000;
+    --bg-2: #0b1110;
+    --panel: #0a0f0e;
+    --panel-2: #101716;
+    --line: rgba(245,248,248,0.10);
+    --line-strong: rgba(245,248,248,0.22);
+    --ink: #f5f8f8;
+    --ink-muted: #7c8a8a;
+    --amber: #2fe3c4;
+    --teal: #58c2b0;
+    --red: #d95c4a;
+    --grey: #4a5656;
+    font-size: 15px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Inter',sans-serif;
+    background-image: radial-gradient(rgba(245,248,248,0.07) 1px, transparent 1px);
+    background-size: 26px 26px;
+    min-height:100vh;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  header{
+    border-bottom:2px solid var(--line-strong);
+    padding: 18px 28px;
+    display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:10px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
+  }
+  header .title{
+    font-family:'JetBrains Mono',monospace; letter-spacing:0.12em; text-transform:uppercase;
+    font-size:20px; font-weight:700; color:var(--ink);
+  }
+  header .title span{color:var(--amber);}
+  header .subtitle{color:var(--ink-muted); font-size:12.5px; letter-spacing:0.03em;}
+  nav{
+    display:flex; gap:2px; padding: 0 28px; border-bottom:1px solid var(--line);
+    background: rgba(0,0,0,0.12);
+    flex-wrap:wrap;
+  }
+  nav button{
+    background:transparent; border:none; color:var(--ink-muted);
+    padding:12px 18px; font-family:'JetBrains Mono',monospace; font-size:12.5px;
+    letter-spacing:0.08em; text-transform:uppercase; cursor:pointer;
+    border-bottom:2px solid transparent; transition: all .15s;
+  }
+  nav button:hover{color:var(--ink);}
+  nav button.active{color:var(--amber); border-bottom:2px solid var(--amber);}
+  main{padding: 24px 28px 60px; max-width:1360px; margin:0 auto;}
+  .grid{display:grid; gap:20px;}
+  .panel{
+    background:var(--panel); border:1px solid var(--line-strong); border-radius:4px;
+    padding:18px 20px;
+  }
+  .panel h2{
+    font-family:'JetBrains Mono',monospace; font-size:13px; letter-spacing:0.1em; text-transform:uppercase;
+    color:var(--amber); margin:0 0 14px; padding-bottom:10px; border-bottom:1px dashed var(--line-strong);
+  }
+  .panel h3{font-size:13px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.06em; margin:16px 0 8px;}
+  label{display:block; font-size:12px; color:var(--ink-muted); margin-bottom:4px; letter-spacing:0.02em;}
+  input, select, textarea{
+    background:var(--bg-2); border:1px solid var(--line-strong); color:var(--ink);
+    padding:8px 10px; border-radius:3px; font-family:'Inter',sans-serif; font-size:13.5px; width:100%;
+  }
+  input[type=number]{font-family:'JetBrains Mono',monospace;}
+  input:focus, select:focus, textarea:focus{outline:2px solid var(--amber); outline-offset:1px;}
+  button.btn{
+    background:var(--amber); color:#000; border:none; padding:9px 16px; border-radius:3px;
+    font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.06em; text-transform:uppercase;
+    cursor:pointer; font-weight:700;
+  }
+  button.btn:hover{filter:brightness(1.08);}
+  button.btn.ghost{
+    background:transparent; color:var(--ink); border:1px solid var(--line-strong);
+  }
+  button.btn.danger{background:var(--red); color:#fff;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th, td{padding:7px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle;}
+  th{color:var(--ink-muted); font-family:'JetBrains Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;}
+  td.num, th.num{text-align:right; font-family:'JetBrains Mono',monospace;}
+  .badge{
+    display:inline-block; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.05em;
+    text-transform:uppercase; padding:2px 6px; border-radius:2px; border:1px solid;
+  }
+  .badge.direct{color:var(--teal); border-color:var(--teal); background:rgba(88,194,176,0.12);}
+  .badge.regional{color:#f2a63d; border-color:#f2a63d; background:rgba(242,166,61,0.12);}
+  .badge.global{color:#c98be0; border-color:#c98be0; background:rgba(201,139,224,0.12);}
+  .badge.none{color:var(--red); border-color:var(--red); background:rgba(217,92,74,0.12);}
+  .badge.mixed{color:#9fd1ff; border-color:#9fd1ff; background:rgba(159,209,255,0.12);}
+  details{border:1px solid var(--line); border-radius:3px; margin-bottom:8px; background:rgba(255,255,255,0.02);}
+  summary{
+    padding:9px 12px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:12px;
+    letter-spacing:0.05em; text-transform:uppercase; color:var(--ink);
+  }
+  summary:hover{color:var(--amber);}
+  .section-body{padding: 4px 14px 12px;}
+  .row3{display:grid; grid-template-columns: repeat(3,1fr); gap:12px;}
+  .row4{display:grid; grid-template-columns: repeat(4,1fr); gap:12px;}
+  .item-row{display:grid; grid-template-columns: 1fr 90px; gap:10px; align-items:center; padding:5px 0;}
+  .item-row .lbl{font-size:12.5px; color:var(--ink);}
+  .item-row .lbl .unit{color:var(--ink-muted); font-size:11px;}
+  .qty-row{display:grid; grid-template-columns: 1fr 70px 90px 90px 130px; gap:8px; align-items:center; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.04);}
+  .qty-row .lbl{font-size:12.5px;}
+  .qty-row input[type=number]{padding:6px 8px;}
+  .muted{color:var(--ink-muted);}
+  .small{font-size:11.5px;}
+  #map-wrap{position:relative;}
+  #worldmap{width:100%; height:auto; display:block;}
+  .marker{cursor:pointer;}
+  .marker circle{transition: r .1s;}
+  .marker:hover circle{filter:brightness(1.3);}
+  .legend-swatch{display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:6px; vertical-align:middle;}
+  .empty-state{text-align:center; padding:40px 20px; color:var(--ink-muted);}
+  .empty-state .big{font-family:'JetBrains Mono',monospace; font-size:15px; color:var(--ink); letter-spacing:0.05em; text-transform:uppercase; margin-bottom:6px;}
+  .totals-line{display:flex; justify-content:space-between; padding:8px 0; border-top:1px solid var(--line-strong); font-family:'JetBrains Mono',monospace; font-size:13px;}
+  .totals-line.grand{font-size:16px; color:var(--amber); font-weight:700; border-top:2px solid var(--amber); margin-top:6px;}
+  a.linklike{color:var(--amber); text-decoration:underline; cursor:pointer;}
+  .flex-between{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
+  .tag-country{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--ink-muted); border:1px solid var(--line); padding:2px 7px; border-radius:2px;}
+  ::placeholder{color:#5a6a6a;}
+  .save-note{font-size:11px; color:var(--ink-muted); font-style:italic;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="title">SI Rate Book <span>//</span> Global Coverage Plan</div>
+    <div class="subtitle">Site investigation &amp; geotechnical quotation database — direct cost estimation across active markets</div>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <button class="btn ghost" id="export-data" style="padding:6px 12px;">Export data</button>
+    <button class="btn ghost" id="import-data" style="padding:6px 12px;">Import data</button>
+    <input type="file" id="import-file" accept=".json" style="display:none;">
+    <div class="save-note" id="save-indicator">All data saved to this browser/account · nothing shared</div>
+  </div>
+</header>
+
+<nav id="tabs">
+  <button data-tab="dashboard" class="active">01 · Coverage Map</button>
+  <button data-tab="quotations">02 · Quotation Log</button>
+  <button data-tab="generate">03 · Generate Quote</button>
+  <button data-tab="trends">04 · Price Trends</button>
+  <button data-tab="settings">05 · Settings</button>
+</nav>
+
+<main id="app"></main>
+
+<script>
+/* ============================= DATA MODEL ============================= */
+
+const BOQ = [
+  {code:'GEN-A', section:'General', label:'Mobilization', unit:'Item'},
+
+  {code:'BOR-A', section:'Boring and Sampling', label:'Moving/setting up drilling rig (permits, GPR/utility clearance, depths 15–30m)', unit:'No.'},
+  {code:'BOR-B', section:'Boring and Sampling', label:'Drilling in any material except rock (incl. SPT)', unit:'m'},
+  {code:'BOR-C', section:'Boring and Sampling', label:'Continuous coring through rock', unit:'m'},
+  {code:'BOR-D', section:'Boring and Sampling', label:'Undisturbed sampling', unit:'No.'},
+
+  {code:'EXC-A', section:'Exploratory Excavations', label:'Test pits ≤ 3m deep', unit:'No.'},
+  {code:'EXC-B', section:'Exploratory Excavations', label:'Test pits ≤ 5m deep', unit:'No.'},
+
+  {code:'INS-A', section:'In-situ Testing', label:'CPT / PCPT (up to 15m or refusal)', unit:'No.'},
+  {code:'INS-B', section:'In-situ Testing', label:'Dynamic Cone Penetration / Dynamic Probing', unit:'No.'},
+  {code:'INS-C', section:'In-situ Testing', label:'Menard Pressuremeter Test', unit:'No.'},
+  {code:'INS-D', section:'In-situ Testing', label:'Plate Load Test (soaked)', unit:'No.'},
+  {code:'INS-E', section:'In-situ Testing', label:'Flexible Dilatometer Test', unit:'No.'},
+  {code:'INS-F', section:'In-situ Testing', label:'Light Weight Deflectometer Test', unit:'No.'},
+  {code:'INS-G', section:'In-situ Testing', label:'Vane Shear Test', unit:'No.'},
+  {code:'INS-H', section:'In-situ Testing', label:'Field Density Test', unit:'No.'},
+  {code:'INS-I', section:'In-situ Testing', label:'Soil Electrical Resistivity Test (ASTM G57)', unit:'No.'},
+  {code:'INS-J', section:'In-situ Testing', label:'Soil Thermal Resistivity Test (IEEE-442/ASTM D5334)', unit:'No.'},
+
+  {code:'GW-A', section:'Groundwater Monitoring', label:'Standpipes and piezometers (20m depth)', unit:'No.'},
+  {code:'GW-B', section:'Groundwater Monitoring', label:'Constant/Falling head test', unit:'No.'},
+  {code:'GW-C', section:'Groundwater Monitoring', label:'Packer test', unit:'No.'},
+  {code:'GW-D', section:'Groundwater Monitoring', label:'Slug test', unit:'No.'},
+  {code:'GW-E', section:'Groundwater Monitoring', label:'Pumping test', unit:'No.'},
+  {code:'GW-F', section:'Groundwater Monitoring', label:'Infiltrometer test', unit:'No.'},
+  {code:'GW-G', section:'Groundwater Monitoring', label:'Water permeability test (closed system)', unit:'No.'},
+  {code:'GW-H', section:'Groundwater Monitoring', label:'Percolation/soakaway test', unit:'No.'},
+  {code:'GW-I', section:'Groundwater Monitoring', label:'Lugeon test', unit:'No.'},
+
+  {code:'GEO-A', section:'Geophysical Investigations', label:'Vertical Electrical Sounding (VES)', unit:'m'},
+  {code:'GEO-B', section:'Geophysical Investigations', label:'Electrical Resistivity Tomography (ERT)', unit:'m'},
+  {code:'GEO-C', section:'Geophysical Investigations', label:'Soil Resistivity Method', unit:'m'},
+  {code:'GEO-D', section:'Geophysical Investigations', label:'Multi-Channel Analysis of Surface Waves (MASW)', unit:'m'},
+  {code:'GEO-E', section:'Geophysical Investigations', label:'Refraction Microtremor (REMI)', unit:'m'},
+  {code:'GEO-F', section:'Geophysical Investigations', label:'Seismic Reflection Method', unit:'m'},
+  {code:'GEO-G', section:'Geophysical Investigations', label:'Seismic Refraction Method', unit:'m'},
+  {code:'GEO-H', section:'Geophysical Investigations', label:'Multi-Channel Sub-Bottom Seismic Profiling', unit:'m'},
+  {code:'GEO-I', section:'Geophysical Investigations', label:'Crosshole Seismic', unit:'m'},
+  {code:'GEO-J', section:'Geophysical Investigations', label:'Downhole Seismic', unit:'m'},
+  {code:'GEO-K', section:'Geophysical Investigations', label:'P & S Suspension Logging', unit:'m'},
+  {code:'GEO-L', section:'Geophysical Investigations', label:'Frequency Domain Electromagnetic Method (FDEM)', unit:'m'},
+  {code:'GEO-M', section:'Geophysical Investigations', label:'Time Domain Electromagnetic Method (TDEM)', unit:'m'},
+  {code:'GEO-N', section:'Geophysical Investigations', label:'Ground Penetrating Radar Method (GPR)', unit:'m'},
+  {code:'GEO-O', section:'Geophysical Investigations', label:'Micro Gravity Method', unit:'m'},
+  {code:'GEO-P', section:'Geophysical Investigations', label:'Land Magnetic Method', unit:'m'},
+  {code:'GEO-Q', section:'Geophysical Investigations', label:'Marine Magnetic Method', unit:'m'},
+
+  {code:'LS-A', section:'Laboratory Soil Testing', label:'Grain Size Analysis', unit:'No.'},
+  {code:'LS-B', section:'Laboratory Soil Testing', label:'Moisture Content', unit:'No.'},
+  {code:'LS-C', section:'Laboratory Soil Testing', label:'Particle Size Analysis by Sedimentation', unit:'No.'},
+  {code:'LS-D', section:'Laboratory Soil Testing', label:'Dry and Bulk Densities', unit:'No.'},
+  {code:'LS-E', section:'Laboratory Soil Testing', label:'Plasticity Indices', unit:'No.'},
+  {code:'LS-F', section:'Laboratory Soil Testing', label:'Unconsolidated Undrained Triaxial Compression Test', unit:'No.'},
+  {code:'LS-G', section:'Laboratory Soil Testing', label:'Consolidated Undrained Triaxial Compression Test', unit:'No.'},
+  {code:'LS-H', section:'Laboratory Soil Testing', label:'Consolidated Drained Triaxial Compression Test', unit:'No.'},
+  {code:'LS-I', section:'Laboratory Soil Testing', label:'Consolidated Drained Direct Shear Test', unit:'No.'},
+  {code:'LS-J', section:'Laboratory Soil Testing', label:'Unconfined Compression Test (Cohesive Soil)', unit:'No.'},
+  {code:'LS-K', section:'Laboratory Soil Testing', label:'One Dimensional Consolidation Test', unit:'No.'},
+  {code:'LS-L', section:'Laboratory Soil Testing', label:'Specific Gravity of Soil Particles', unit:'No.'},
+  {code:'LS-M', section:'Laboratory Soil Testing', label:'Linear Shrinkage of Soil', unit:'No.'},
+  {code:'LS-N', section:'Laboratory Soil Testing', label:'One Dimensional Swell or Collapse Potential', unit:'No.'},
+  {code:'LS-O', section:'Laboratory Soil Testing', label:'Dry Density/Moisture Content Relationship', unit:'No.'},
+  {code:'LS-P', section:'Laboratory Soil Testing', label:'California Bearing Ratio (CBR)', unit:'No.'},
+  {code:'LS-Q', section:'Laboratory Soil Testing', label:'Sand Equivalent', unit:'No.'},
+  {code:'LS-R', section:'Laboratory Soil Testing', label:'Clay Lumps & Friable Particles', unit:'No.'},
+  {code:'LS-S', section:'Laboratory Soil Testing', label:'Drying and Shrinkage Test', unit:'No.'},
+  {code:'LS-T', section:'Laboratory Soil Testing', label:'Dispersive Test – Pin-hole Method', unit:'No.'},
+  {code:'LS-U', section:'Laboratory Soil Testing', label:'Dispersive Test – Double Hydrometer Method', unit:'No.'},
+
+  {code:'LR-A', section:'Laboratory Rock Testing', label:'Natural Moisture Content of Rock Core', unit:'No.'},
+  {code:'LR-B', section:'Laboratory Rock Testing', label:'Porosity of Rock Core', unit:'No.'},
+  {code:'LR-C', section:'Laboratory Rock Testing', label:'Bulk Density of Rock Core', unit:'No.'},
+  {code:'LR-D', section:'Laboratory Rock Testing', label:'Petrographic Analysis of Rock Core', unit:'No.'},
+  {code:'LR-E', section:'Laboratory Rock Testing', label:'Point Load Test', unit:'No.'},
+  {code:'LR-F', section:'Laboratory Rock Testing', label:'UCS + Static Elastic Modulus of Rock Core', unit:'No.'},
+  {code:'LR-F1', section:'Laboratory Rock Testing', label:'UCS of Rock Core (only)', unit:'No.'},
+  {code:'LR-G', section:'Laboratory Rock Testing', label:'Direct Shear Box Test (Rock)', unit:'No.'},
+  {code:'LR-H', section:'Laboratory Rock Testing', label:'Splitting Tensile Strength (Rock)', unit:'No.'},
+  {code:'LR-I', section:'Laboratory Rock Testing', label:'Direct Tensile Strength', unit:'No.'},
+  {code:'LR-J', section:'Laboratory Rock Testing', label:'Slake Durability Index', unit:'No.'},
+  {code:'LR-K', section:'Laboratory Rock Testing', label:'Cerchar Test', unit:'No.'},
+  {code:'LR-L', section:'Laboratory Rock Testing', label:'Rock Hardness', unit:'No.'},
+  {code:'LR-M', section:'Laboratory Rock Testing', label:'Los Angeles Abrasion Test', unit:'No.'},
+  {code:'LR-N', section:'Laboratory Rock Testing', label:'Soundness by Magnesium Sulphate', unit:'No.'},
+  {code:'LR-O', section:'Laboratory Rock Testing', label:'Ten Percent Fines Test', unit:'No.'},
+  {code:'LR-P', section:'Laboratory Rock Testing', label:'Aggregate Impact Value', unit:'No.'},
+  {code:'LR-Q', section:'Laboratory Rock Testing', label:'Polished Stone Value', unit:'No.'},
+  {code:'LR-R', section:'Laboratory Rock Testing', label:'Water Absorption', unit:'No.'},
+  {code:'LR-S', section:'Laboratory Rock Testing', label:'Micro-Petrographic Analysis (incl. Asbestos)', unit:'No.'},
+  {code:'LR-T', section:'Laboratory Rock Testing', label:'Petrographic Description of Rock', unit:'No.'},
+
+  {code:'CHM-A', section:'Laboratory Chemical Testing', label:'Chloride Content of Soil', unit:'No.'},
+  {code:'CHM-B', section:'Laboratory Chemical Testing', label:'Sulphate Content of Soil', unit:'No.'},
+  {code:'CHM-C', section:'Laboratory Chemical Testing', label:'Calcium Carbonate Content of Soil/Rock', unit:'No.'},
+  {code:'CHM-D', section:'Laboratory Chemical Testing', label:'pH Value of Soil', unit:'No.'},
+  {code:'CHM-E', section:'Laboratory Chemical Testing', label:'Chloride Content of Groundwater', unit:'No.'},
+  {code:'CHM-F', section:'Laboratory Chemical Testing', label:'Sulphate Content of Groundwater', unit:'No.'},
+  {code:'CHM-G', section:'Laboratory Chemical Testing', label:'pH Value of Groundwater', unit:'No.'},
+  {code:'CHM-H', section:'Laboratory Chemical Testing', label:'Organic Matter Content', unit:'No.'},
+  {code:'CHM-I', section:'Laboratory Chemical Testing', label:'Total Suspended Solids', unit:'No.'},
+  {code:'CHM-J', section:'Laboratory Chemical Testing', label:'Total Dissolved Solids', unit:'No.'},
+  {code:'CHM-K', section:'Laboratory Chemical Testing', label:'Total Soluble Salts', unit:'No.'},
+
+  {code:'REP-A', section:'Reporting', label:'Full Factual Report (incl. Digital Data)', unit:'No.'},
+  {code:'REP-B', section:'Reporting', label:'Full Interpretive Report (incl. Digital Data)', unit:'No.'},
+];
+
+const SECTIONS = [...new Set(BOQ.map(b=>b.section))];
+
+const DEFAULT_REFERENCE_BASKET = [
+  {code:'GEN-A', qty:1},
+  {code:'BOR-A', qty:1},
+  {code:'BOR-B', qty:20},
+  {code:'BOR-D', qty:5},
+  {code:'LS-A', qty:10},
+  {code:'LS-B', qty:10},
+  {code:'LS-F', qty:5},
+];
+
+const BASE_COUNTRIES = [
+  // GCC
+  {name:'Saudi Arabia', region:'GCC', lat:24, lon:45},
+  {name:'United Arab Emirates', region:'GCC', lat:24, lon:54},
+  {name:'Qatar', region:'GCC', lat:25.3, lon:51.2},
+  {name:'Kuwait', region:'GCC', lat:29.3, lon:47.5},
+  {name:'Bahrain', region:'GCC', lat:26.0, lon:50.5},
+  {name:'Oman', region:'GCC', lat:21.5, lon:57.5},
+  // Levant & Iraq
+  {name:'Iraq', region:'Levant & Iraq', lat:33.3, lon:43.7},
+  {name:'Jordan', region:'Levant & Iraq', lat:31.2, lon:36.8},
+  {name:'Lebanon', region:'Levant & Iraq', lat:33.9, lon:35.5},
+  {name:'Syria', region:'Levant & Iraq', lat:34.8, lon:38.0},
+  {name:'Yemen', region:'Levant & Iraq', lat:15.5, lon:48.5},
+  // North Africa
+  {name:'Egypt', region:'North Africa', lat:26.8, lon:30.8},
+  {name:'Libya', region:'North Africa', lat:26.3, lon:17.2},
+  {name:'Algeria', region:'North Africa', lat:28.0, lon:3.0},
+  {name:'Morocco', region:'North Africa', lat:31.8, lon:-6.0},
+  {name:'Tunisia', region:'North Africa', lat:34.0, lon:9.0},
+  {name:'Sudan', region:'North Africa', lat:15.6, lon:30.2},
+  // Sub-Saharan Africa
+  {name:'Nigeria', region:'Sub-Saharan Africa', lat:9.1, lon:8.7},
+  {name:'Kenya', region:'Sub-Saharan Africa', lat:0.0, lon:38.0},
+  {name:'Ethiopia', region:'Sub-Saharan Africa', lat:9.1, lon:40.5},
+  {name:'Ghana', region:'Sub-Saharan Africa', lat:7.9, lon:-1.0},
+  {name:'Tanzania', region:'Sub-Saharan Africa', lat:-6.4, lon:34.9},
+  {name:'South Africa', region:'Sub-Saharan Africa', lat:-29.0, lon:24.0},
+  {name:'Senegal', region:'Sub-Saharan Africa', lat:14.5, lon:-14.5},
+  {name:"Ivory Coast", region:'Sub-Saharan Africa', lat:7.5, lon:-5.5},
+  {name:'Mozambique', region:'Sub-Saharan Africa', lat:-18.7, lon:35.5},
+  {name:'Angola', region:'Sub-Saharan Africa', lat:-11.2, lon:17.9},
+  {name:'DR Congo', region:'Sub-Saharan Africa', lat:-4.0, lon:21.8},
+  {name:'Uganda', region:'Sub-Saharan Africa', lat:1.4, lon:32.3},
+  {name:'Cameroon', region:'Sub-Saharan Africa', lat:6.0, lon:12.5},
+  {name:'Zambia', region:'Sub-Saharan Africa', lat:-13.1, lon:27.8},
+  // South Asia
+  {name:'India', region:'South Asia', lat:22.0, lon:79.0},
+  {name:'Pakistan', region:'South Asia', lat:30.4, lon:69.3},
+  {name:'Bangladesh', region:'South Asia', lat:23.7, lon:90.4},
+  {name:'Sri Lanka', region:'South Asia', lat:7.9, lon:80.8},
+  // Southeast Asia
+  {name:'Indonesia', region:'Southeast Asia', lat:-2.5, lon:118.0},
+  {name:'Malaysia', region:'Southeast Asia', lat:3.1, lon:101.7},
+  {name:'Vietnam', region:'Southeast Asia', lat:16.2, lon:107.9},
+  {name:'Philippines', region:'Southeast Asia', lat:12.9, lon:121.8},
+  {name:'Thailand', region:'Southeast Asia', lat:15.9, lon:100.9},
+  {name:'Singapore', region:'Southeast Asia', lat:1.35, lon:103.8},
+  {name:'Myanmar', region:'Southeast Asia', lat:21.9, lon:95.9},
+  // East Asia
+  {name:'China', region:'East Asia', lat:35.9, lon:104.2},
+  {name:'Japan', region:'East Asia', lat:36.2, lon:138.3},
+  {name:'South Korea', region:'East Asia', lat:36.5, lon:127.9},
+  // Europe
+  {name:'United Kingdom', region:'Europe', lat:54.0, lon:-2.0},
+  {name:'France', region:'Europe', lat:46.6, lon:2.2},
+  {name:'Germany', region:'Europe', lat:51.2, lon:10.4},
+  {name:'Spain', region:'Europe', lat:40.0, lon:-4.0},
+  {name:'Italy', region:'Europe', lat:42.8, lon:12.8},
+  {name:'Netherlands', region:'Europe', lat:52.1, lon:5.3},
+  {name:'Poland', region:'Europe', lat:52.0, lon:19.1},
+  {name:'Greece', region:'Europe', lat:39.1, lon:22.0},
+  {name:'Turkey', region:'Europe', lat:39.0, lon:35.2},
+  {name:'Romania', region:'Europe', lat:45.9, lon:25.0},
+  // North America
+  {name:'United States', region:'North America', lat:39.8, lon:-98.6},
+  {name:'Canada', region:'North America', lat:56.1, lon:-106.3},
+  {name:'Mexico', region:'North America', lat:23.6, lon:-102.5},
+  // Latin America
+  {name:'Brazil', region:'Latin America', lat:-10.3, lon:-53.2},
+  {name:'Argentina', region:'Latin America', lat:-34.6, lon:-64.4},
+  {name:'Chile', region:'Latin America', lat:-33.4, lon:-70.6},
+  {name:'Colombia', region:'Latin America', lat:4.6, lon:-74.3},
+  {name:'Peru', region:'Latin America', lat:-9.2, lon:-75.0},
+  // Oceania
+  {name:'Australia', region:'Oceania', lat:-25.3, lon:133.8},
+  {name:'New Zealand', region:'Oceania', lat:-41.0, lon:174.0},
+  // Central Asia
+  {name:'Kazakhstan', region:'Central Asia', lat:48.0, lon:68.0},
+  {name:'Uzbekistan', region:'Central Asia', lat:41.4, lon:64.6},
+];
+
+const SITE_ACCESS = [
+  {key:'standard', label:'Standard / open site'},
+  {key:'restricted', label:'Restricted access (airport, port, military, refinery, high-security)'},
+  {key:'urban', label:'Urban / dense utilities'},
+  {key:'remote', label:'Remote / difficult logistics'},
+  {key:'offshore', label:'Offshore / marine'},
+];
+
+const REGIONS = [...new Set(BASE_COUNTRIES.map(c=>c.region))];
+
+// Reference annual inflation (%) — World Bank CPI, latest available year per country
+// (mostly 2024; a few 2023 where 2024 wasn't yet published). Source: World Bank /
+// databank.worldbank.org, "Inflation, consumer prices (annual %)", compiled via Wikipedia.
+// Loaded on demand into Settings — never applied automatically, and never overwrites
+// a value you've already saved unless you choose to.
+const REFERENCE_INFLATION = {
+  'Saudi Arabia':{v:1.7,y:2024}, 'United Arab Emirates':{v:1.7,y:2024}, 'Qatar':{v:1.3,y:2024},
+  'Kuwait':{v:2.9,y:2024}, 'Bahrain':{v:0.9,y:2024}, 'Oman':{v:1.0,y:2023},
+  'Iraq':{v:4.4,y:2023}, 'Jordan':{v:1.6,y:2024}, 'Lebanon':{v:45.2,y:2024},
+  'Egypt':{v:28.3,y:2024}, 'Libya':{v:2.1,y:2024}, 'Algeria':{v:4.0,y:2024},
+  'Morocco':{v:1.0,y:2024}, 'Tunisia':{v:7.2,y:2024},
+  'Nigeria':{v:33.2,y:2024}, 'Kenya':{v:4.5,y:2024}, 'Ethiopia':{v:21.0,y:2024},
+  'Ghana':{v:22.8,y:2024}, 'Tanzania':{v:3.1,y:2024}, 'South Africa':{v:4.4,y:2024},
+  'Senegal':{v:0.8,y:2024}, 'Ivory Coast':{v:3.5,y:2024}, 'Mozambique':{v:4.1,y:2024},
+  'Angola':{v:28.2,y:2024}, 'Uganda':{v:3.3,y:2024}, 'Cameroon':{v:4.5,y:2024},
+  'Zambia':{v:15.0,y:2024},
+  'India':{v:5.0,y:2024}, 'Pakistan':{v:12.6,y:2024}, 'Bangladesh':{v:10.5,y:2024},
+  'Sri Lanka':{v:-0.4,y:2024},
+  'Indonesia':{v:3.7,y:2023}, 'Malaysia':{v:1.8,y:2024}, 'Vietnam':{v:3.6,y:2024},
+  'Philippines':{v:3.2,y:2024}, 'Thailand':{v:1.4,y:2024}, 'Singapore':{v:2.4,y:2024},
+  'China':{v:0.2,y:2024}, 'Japan':{v:2.7,y:2024}, 'South Korea':{v:2.3,y:2024},
+  'United Kingdom':{v:3.3,y:2024}, 'France':{v:2.0,y:2024}, 'Germany':{v:2.3,y:2024},
+  'Spain':{v:2.8,y:2024}, 'Italy':{v:1.0,y:2024}, 'Netherlands':{v:3.3,y:2024},
+  'Poland':{v:3.8,y:2024}, 'Greece':{v:2.7,y:2024}, 'Turkey':{v:58.5,y:2024},
+  'Romania':{v:5.7,y:2024},
+  'United States':{v:2.9,y:2024}, 'Canada':{v:2.4,y:2024}, 'Mexico':{v:4.7,y:2024},
+  'Brazil':{v:4.4,y:2024}, 'Argentina':{v:219.9,y:2024}, 'Chile':{v:4.3,y:2024},
+  'Colombia':{v:6.6,y:2024}, 'Peru':{v:2.0,y:2024},
+  'Australia':{v:3.2,y:2024}, 'New Zealand':{v:2.9,y:2024},
+  'Kazakhstan':{v:8.8,y:2024}, 'Uzbekistan':{v:9.6,y:2024},
+};
+
+const CURRENCIES = ['USD','EUR','GBP','AED','SAR','QAR','KWD','OMR','BHD','EGP','NGN','INR','PKR','IDR','MYR','THB','PHP','VND','CNY','JPY','KRW','TRY','ZAR','BRL','MXN','AUD'];
+
+/* ============================= STATE ============================= */
+
+let quotations = [];      // {id, country, subcontractor, currency, date, rates:{code:rate}, notes}
+let customCountries = []; // same shape as BASE_COUNTRIES
+let settings = {defaultInflation:3, inflationRates:{}, costFactors:{}, referenceBasket: DEFAULT_REFERENCE_BASKET.slice()};
+
+function currentBasket(){
+  return (settings.referenceBasket && settings.referenceBasket.length) ? settings.referenceBasket : DEFAULT_REFERENCE_BASKET;
+}
+let currentTab = 'dashboard';
+let editingQuoteId = null;
+let genState = {country:'', targetDate: new Date().toISOString().slice(0,10), siteAccess:'standard', qty:{}, overrides:{}};
+let selectedMapCountry = null;
+let mapMode = 'basket'; // 'basket' | 'single'
+let mapSingleItem = 'BOR-B';
+
+function allCountries(){ return BASE_COUNTRIES.concat(customCountries); }
+function getCountryMeta(name){ return allCountries().find(c=>c.name===name); }
+
+/* ============================= STORAGE COMPATIBILITY SHIM ============================= */
+// window.storage is provided automatically inside Claude's artifact environment.
+// Outside of it (e.g. this file hosted on GitHub Pages, or opened as a local file),
+// that API doesn't exist — so we fall back to localStorage here with the same
+// interface, keeping this single file working in both places.
+if(!window.storage){
+  const LS_PREFIX = 'si-rate-book:';
+  window.storage = {
+    async get(key, shared){
+      const raw = localStorage.getItem(LS_PREFIX + key);
+      if(raw===null) throw new Error('Key not found: ' + key);
+      return { key, value: raw, shared: !!shared };
+    },
+    async set(key, value, shared){
+      localStorage.setItem(LS_PREFIX + key, value);
+      return { key, value, shared: !!shared };
+    },
+    async delete(key, shared){
+      localStorage.removeItem(LS_PREFIX + key);
+      return { key, deleted:true, shared: !!shared };
+    },
+    async list(prefix, shared){
+      const keys = Object.keys(localStorage)
+        .filter(k=>k.startsWith(LS_PREFIX + (prefix||'')))
+        .map(k=>k.slice(LS_PREFIX.length));
+      return { keys, prefix, shared: !!shared };
+    }
+  };
+}
+
+/* ============================= STORAGE ============================= */
+
+async function loadAll(){
+  try{
+    const q = await window.storage.get('quotations', false);
+    quotations = q ? JSON.parse(q.value) : [];
+  }catch(e){ quotations = []; }
+  try{
+    const c = await window.storage.get('customCountries', false);
+    customCountries = c ? JSON.parse(c.value) : [];
+  }catch(e){ customCountries = []; }
+  try{
+    const s = await window.storage.get('settings', false);
+    settings = s ? JSON.parse(s.value) : settings;
+  }catch(e){ /* keep default */ }
+}
+async function saveQuotations(){
+  try{ await window.storage.set('quotations', JSON.stringify(quotations), false); }catch(e){ console.error('save failed', e); }
+}
+async function saveCountries(){
+  try{ await window.storage.set('customCountries', JSON.stringify(customCountries), false); }catch(e){ console.error('save failed', e); }
+}
+async function saveSettings(){
+  try{ await window.storage.set('settings', JSON.stringify(settings), false); }catch(e){ console.error('save failed', e); }
+}
+
+/* ============================= PRICING ENGINE ============================= */
+
+function yearsBetween(d1, d2){
+  const a = new Date(d1), b = new Date(d2);
+  return (b-a) / (1000*60*60*24*365.25);
+}
+function inflationFor(country){
+  const v = settings.inflationRates[country];
+  return (v===undefined || v===null || v==='') ? settings.defaultInflation : parseFloat(v);
+}
+function costFactorFor(country){
+  const v = settings.costFactors[country];
+  return (v===undefined || v===null || v==='') ? 1 : parseFloat(v);
+}
+function latestDirect(country, code){
+  const list = quotations.filter(q=>q.country===country && q.rates && q.rates[code]!==undefined && q.rates[code]!=='' && q.rates[code]!==null);
+  if(!list.length) return null;
+  list.sort((a,b)=> new Date(b.date) - new Date(a.date));
+  return list[0];
+}
+function adjustedValueOf(rec, code, country, targetDate){
+  const rate = parseFloat(rec.rates[code]);
+  const yrs = Math.max(0, yearsBetween(rec.date, targetDate));
+  const infl = inflationFor(country);
+  return rate * Math.pow(1 + infl/100, yrs);
+}
+function getItemPrice(country, code, targetDate){
+  const direct = latestDirect(country, code);
+  if(direct){
+    return { value: adjustedValueOf(direct, code, country, targetDate), source:'direct',
+      detail: `Own quotation · ${direct.date}${direct.subcontractor ? ' · '+direct.subcontractor : ''}` };
+  }
+  const meta = getCountryMeta(country);
+  const region = meta ? meta.region : null;
+  if(region){
+    const pool = [];
+    allCountries().filter(c=>c.region===region && c.name!==country).forEach(c=>{
+      const rec = latestDirect(c.name, code);
+      if(rec){
+        const base = adjustedValueOf(rec, code, c.name, targetDate);
+        const ratio = costFactorFor(country) / costFactorFor(c.name);
+        pool.push({value: base*ratio, from:c.name, date:rec.date});
+      }
+    });
+    if(pool.length){
+      const avg = pool.reduce((s,p)=>s+p.value,0)/pool.length;
+      return { value: avg, source:'regional', detail: `Regional est. from ${pool.map(p=>p.from).join(', ')}` };
+    }
+  }
+  const globalPool = [];
+  allCountries().filter(c=>c.name!==country).forEach(c=>{
+    const rec = latestDirect(c.name, code);
+    if(rec){
+      const base = adjustedValueOf(rec, code, c.name, targetDate);
+      const ratio = costFactorFor(country) / costFactorFor(c.name);
+      globalPool.push({value: base*ratio, from:c.name});
+    }
+  });
+  if(globalPool.length){
+    const avg = globalPool.reduce((s,p)=>s+p.value,0)/globalPool.length;
+    return { value: avg, source:'global', detail: `Global est. — average of ${globalPool.length} countries with data` };
+  }
+  return { value:null, source:'none', detail:'No quotation data available anywhere yet' };
+}
+function computeCountryIndex(country, targetDate){
+  if(mapMode==='single'){
+    const p = getItemPrice(country, mapSingleItem, targetDate);
+    return { value: p.value, coverage: p.value!=null ? '1/1' : '0/1', source: p.source };
+  }
+  let total=0, count=0; const sources=new Set();
+  currentBasket().forEach(b=>{
+    const p = getItemPrice(country, b.code, targetDate);
+    if(p.value!=null){ total += p.value*b.qty; count++; sources.add(p.source); }
+  });
+  let overall='none';
+  if(sources.size){
+    if(sources.has('direct') && sources.size===1) overall='direct';
+    else if(sources.size>1) overall='mixed';
+    else overall = [...sources][0];
+  }
+  return { value: count? total : null, coverage: `${count}/${currentBasket().length}`, source: overall };
+}
+
+/* ============================= RENDER: SHELL ============================= */
+
+document.getElementById('tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-tab]');
+  if(!btn) return;
+  currentTab = btn.dataset.tab;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b===btn));
+  render();
+});
+
+function render(){
+  const app = document.getElementById('app');
+  if(currentTab==='dashboard') app.innerHTML = renderDashboard();
+  else if(currentTab==='quotations') app.innerHTML = renderQuotations();
+  else if(currentTab==='generate') app.innerHTML = renderGenerate();
+  else if(currentTab==='trends') app.innerHTML = renderTrends();
+  else if(currentTab==='settings') app.innerHTML = renderSettings();
+  attachHandlers();
+}
+
+/* ============================= DASHBOARD ============================= */
+
+function project(lat, lon){
+  const x = (lon+180)/360*1000;
+  const y = (90-lat)/180*500;
+  return [x,y];
+}
+function colorForValue(v, min, max){
+  if(v==null) return '#5a6a6a';
+  const t = max>min ? (v-min)/(max-min) : 0.5;
+  // teal (low) -> amber (mid) -> red (high)
+  if(t<0.5){
+    const k = t/0.5;
+    return lerpColor('#58c2b0','#f2a63d',k);
+  } else {
+    const k = (t-0.5)/0.5;
+    return lerpColor('#f2a63d','#d95c4a',k);
+  }
+}
+function lerpColor(c1,c2,t){
+  const a = hexToRgb(c1), b = hexToRgb(c2);
+  const r = Math.round(a[0]+(b[0]-a[0])*t);
+  const g = Math.round(a[1]+(b[1]-a[1])*t);
+  const bl = Math.round(a[2]+(b[2]-a[2])*t);
+  return `rgb(${r},${g},${bl})`;
+}
+function hexToRgb(hex){
+  const h = hex.replace('#','');
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+
+function renderDashboard(){
+  const today = new Date().toISOString().slice(0,10);
+  const countries = allCountries();
+  const indices = countries.map(c=>({...c, idx: computeCountryIndex(c.name, today)}));
+  const withData = indices.filter(c=>c.idx.value!=null);
+  const values = withData.map(c=>c.idx.value);
+  const min = values.length? Math.min(...values): 0;
+  const max = values.length? Math.max(...values): 1;
+
+  const regionLabels = {
+    'GCC':[24,50], 'Levant & Iraq':[31,40], 'North Africa':[26,10], 'Sub-Saharan Africa':[-8,22],
+    'South Asia':[24,82], 'Southeast Asia':[4,110], 'East Asia':[34,118], 'Europe':[50,15],
+    'North America':[45,-100], 'Latin America':[-15,-62], 'Oceania':[-27,145], 'Central Asia':[46,66]
+  };
+
+  let markers = '';
+  indices.forEach(c=>{
+    const [x,y] = project(c.lat, c.lon);
+    const color = colorForValue(c.idx.value, min, max);
+    const hasAny = c.idx.value!=null;
+    const r = hasAny ? 7 + 5*( (c.idx.value-min)/((max-min)||1) ) : 6;
+    const dash = c.idx.source==='direct' ? '' : (hasAny ? 'stroke-dasharray="3,2"' : 'stroke-dasharray="2,2"');
+    const fill = hasAny ? color : 'none';
+    markers += `<g class="marker" data-country="${c.name}" transform="translate(${x},${y})">
+      <line x1="-9" y1="0" x2="9" y2="0" stroke="${hasAny?color:'#5a6a6a'}" stroke-width="1" opacity="0.55"/>
+      <line x1="0" y1="-9" x2="0" y2="9" stroke="${hasAny?color:'#5a6a6a'}" stroke-width="1" opacity="0.55"/>
+      <circle r="${r}" fill="${fill}" stroke="${hasAny?'#eaf2fa':'#5a6a6a'}" stroke-width="1.4" ${dash} opacity="0.92"/>
+      <title>${c.name} — ${hasAny? '$'+c.idx.value.toFixed(0)+(mapMode==='single'?' est. rate ('+c.idx.source+')':' ref. index ('+c.idx.source+')') : 'no data yet'}</title>
+    </g>`;
+  });
+
+  let gridLines = '';
+  for(let lon=-180; lon<=180; lon+=30){ const [x] = project(0,lon); gridLines += `<line x1="${x}" y1="0" x2="${x}" y2="500" stroke="rgba(220,232,242,0.08)"/>`; }
+  for(let lat=-90; lat<=90; lat+=30){ const [,y] = project(lat,0); gridLines += `<line x1="0" y1="${y}" x2="1000" y2="${y}" stroke="rgba(220,232,242,0.08)"/>`; }
+
+  let regionText = '';
+  Object.entries(regionLabels).forEach(([name,[lat,lon]])=>{
+    const [x,y] = project(lat,lon);
+    regionText += `<text x="${x}" y="${y}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" fill="rgba(220,232,242,0.14)" letter-spacing="2" font-weight="700">${name.toUpperCase()}</text>`;
+  });
+
+  const selected = selectedMapCountry ? indices.find(c=>c.name===selectedMapCountry) : null;
+  let detailPanel = '';
+  if(selected){
+    if(mapMode==='single'){
+      const item = BOQ.find(x=>x.code===mapSingleItem);
+      const p = getItemPrice(selected.name, mapSingleItem, today);
+      detailPanel = `<div class="panel" style="margin-top:16px;">
+        <div class="flex-between"><h2 style="border:none;margin:0;padding:0;">${selected.name} <span class="tag-country">${selected.region}</span></h2>
+        <button class="btn ghost" data-close-detail>Close</button></div>
+        <p class="small muted">${item.code} — ${item.label} (${item.unit})</p>
+        <div class="totals-line grand"><span>Estimated rate</span><span>${p.value!=null? '$'+p.value.toFixed(2) : 'No data anywhere'}</span></div>
+        <p class="small muted" style="margin-top:6px;">Source: <span class="badge ${p.source}">${p.source}</span> ${p.detail}</p>
+      </div>`;
+    } else {
+    let rows = '';
+    currentBasket().forEach(b=>{
+      const item = BOQ.find(x=>x.code===b.code);
+      const p = getItemPrice(selected.name, b.code, today);
+      rows += `<tr><td>${item.label}</td><td class="num">${p.value!=null? '$'+p.value.toFixed(2) : '—'}</td>
+        <td><span class="badge ${p.source}">${p.source}</span></td></tr>`;
+    });
+    detailPanel = `<div class="panel" style="margin-top:16px;">
+      <div class="flex-between"><h2 style="border:none;margin:0;padding:0;">${selected.name} <span class="tag-country">${selected.region}</span></h2>
+      <button class="btn ghost" data-close-detail>Close</button></div>
+      <p class="small muted">Reference basket: ${currentBasket().map(b=>{const it=BOQ.find(x=>x.code===b.code); return `${b.qty} ${it?it.label:b.code}`;}).join(' · ')}
+      &nbsp;<a class="linklike" data-goto="settings">(edit basket)</a></p>
+      <table><thead><tr><th>Item</th><th class="num">Est. rate</th><th>Source</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="totals-line grand"><span>Reference index (today)</span><span>${selected.idx.value!=null? '$'+selected.idx.value.toFixed(0) : 'No data anywhere'}</span></div>
+    </div>`;
+    }
+  }
+
+  const itemOptions = SECTIONS.map(sec=>`<optgroup label="${sec}">${BOQ.filter(b=>b.section===sec).map(it=>`<option value="${it.code}" ${mapSingleItem===it.code?'selected':''}>${it.label}</option>`).join('')}</optgroup>`).join('');
+
+  return `
+    <div class="panel">
+      <div class="flex-between">
+        <h2 style="border:none;margin:0;padding:0;">Global Rate Coverage ${mapMode==='single' ? '— Single Item' : '— Reference Basket Index'} ${mapMode==='basket'?`<a class="linklike small" data-goto="settings" style="font-size:11px;">(edit basket)</a>`:''}</h2>
+        <div class="small muted">${withData.length}/${countries.length} countries with usable pricing (direct or derived) · index date ${today}</div>
+      </div>
+      <div class="flex-between" style="margin: 10px 0; gap:14px;">
+        <div style="display:flex; gap:6px;">
+          <button class="btn ${mapMode==='basket'?'':'ghost'}" id="mode-basket" style="padding:6px 12px;">Composite basket</button>
+          <button class="btn ${mapMode==='single'?'':'ghost'}" id="mode-single" style="padding:6px 12px;">Single item</button>
+        </div>
+        ${mapMode==='single' ? `<div style="flex:1; max-width:420px;"><select id="single-item-select">${itemOptions}</select></div>` : ''}
+      </div>
+      <div id="map-wrap">
+        <svg id="worldmap" viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="0" width="1000" height="500" fill="rgba(255,255,255,0.015)"/>
+          ${gridLines}
+          ${regionText}
+          ${markers}
+        </svg>
+      </div>
+      <div class="flex-between" style="margin-top:12px;">
+        <div class="small muted">
+          <span class="legend-swatch" style="background:${colorForValue(min,min,max)}"></span> lower cost
+          &nbsp;&nbsp;<span class="legend-swatch" style="background:${colorForValue((min+max)/2,min,max)}"></span> mid
+          &nbsp;&nbsp;<span class="legend-swatch" style="background:${colorForValue(max,min,max)}"></span> higher cost
+          &nbsp;&nbsp;<span class="legend-swatch" style="background:#5a6a6a;"></span> no data yet
+        </div>
+        <div class="small muted">Solid ring = direct quotation on file · dashed ring = derived (regional/global) estimate</div>
+      </div>
+    </div>
+    ${detailPanel}
+    ${!quotations.length ? `<div class="panel" style="margin-top:16px;"><div class="empty-state"><div class="big">No quotations logged yet</div>
+      Add your first quotation in the <a class="linklike" data-goto="quotations">Quotation Log</a> tab to start populating the map.</div></div>` : ''}
+  `;
+}
+
+/* ============================= QUOTATIONS TAB ============================= */
+
+function renderQuotations(){
+  const editing = editingQuoteId!=null ? quotations.find(q=>q.id===editingQuoteId) : null;
+  const countries = allCountries().map(c=>c.name).sort();
+
+  let sectionsHtml = '';
+  SECTIONS.forEach(sec=>{
+    const items = BOQ.filter(b=>b.section===sec);
+    let rows = items.map(it=>{
+      const val = editing && editing.rates[it.code]!=null ? editing.rates[it.code] : '';
+      return `<div class="item-row">
+        <div class="lbl">${it.code} — ${it.label} <span class="unit">(${it.unit})</span></div>
+        <input type="number" step="0.01" min="0" placeholder="rate" data-rate-input="${it.code}" value="${val}">
+      </div>`;
+    }).join('');
+    sectionsHtml += `<details ${editing? 'open':''}><summary>${sec}</summary><div class="section-body">${rows}</div></details>`;
+  });
+
+  const rows = quotations.slice().sort((a,b)=> new Date(b.date)-new Date(a.date)).map(q=>{
+    const n = Object.keys(q.rates||{}).length;
+    const accessLabel = (SITE_ACCESS.find(a=>a.key===q.siteAccess)||SITE_ACCESS[0]).label;
+    return `<tr>
+      <td>${q.country}</td><td>${q.date}</td><td>${q.currency}</td><td>${q.subcontractor||'—'}</td>
+      <td class="small">${accessLabel}</td>
+      <td class="num">${n} items</td>
+      <td><a class="linklike" data-edit-quote="${q.id}">Edit</a> &nbsp;·&nbsp; <a class="linklike" data-del-quote="${q.id}">Delete</a></td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="grid" style="grid-template-columns: 1.1fr 1.4fr;">
+    <div class="panel">
+      <h2>${editing? 'Edit Quotation':'Add Quotation'}</h2>
+      <div class="row3">
+        <div><label>Country</label>
+          <input list="country-list" id="q-country" value="${editing? editing.country:''}" placeholder="Select or type new">
+          <datalist id="country-list">${countries.map(c=>`<option value="${c}">`).join('')}</datalist>
+        </div>
+        <div><label>Date of quotation</label><input type="date" id="q-date" value="${editing? editing.date : new Date().toISOString().slice(0,10)}"></div>
+        <div><label>Currency</label>
+          <select id="q-currency">${CURRENCIES.map(c=>`<option ${editing&&editing.currency===c?'selected':''}>${c}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="row3" style="margin-top:10px;">
+        <div style="grid-column:span 2;"><label>Subcontractor</label><input id="q-sub" value="${editing? (editing.subcontractor||''):''}" placeholder="Subcontractor name"></div>
+        <div><label>Notes</label><input id="q-notes" value="${editing? (editing.notes||''):''}" placeholder="Optional"></div>
+      </div>
+      <div class="row3" style="margin-top:10px;">
+        <div style="grid-column:span 2;"><label>Site access type <span class="muted">(needed to separate inflation from site-sensitivity later)</span></label>
+          <select id="q-access">${SITE_ACCESS.map(a=>`<option value="${a.key}" ${editing&&editing.siteAccess===a.key?'selected':''}>${a.label}</option>`).join('')}</select>
+        </div>
+      </div>
+      <h3>Rates by BOQ section — enter only items you have prices for</h3>
+      ${sectionsHtml}
+      <div style="margin-top:14px; display:flex; gap:10px;">
+        <button class="btn" id="save-quote">${editing? 'Save Changes':'Save Quotation'}</button>
+        ${editing? '<button class="btn ghost" id="cancel-edit">Cancel</button>' : ''}
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Quotation Log (${quotations.length})</h2>
+      ${quotations.length ? `<table><thead><tr><th>Country</th><th>Date</th><th>Ccy</th><th>Subcontractor</th><th>Site access</th><th class="num">Items priced</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<div class="empty-state"><div class="big">Log is empty</div>Fill the form on the left with your first quotation.</div>`}
+    </div>
+  </div>`;
+}
+
+/* ============================= GENERATE QUOTE TAB ============================= */
+
+function renderGenerate(){
+  const countries = allCountries().map(c=>c.name).sort();
+  let sectionsHtml = '';
+  SECTIONS.forEach(sec=>{
+    const items = BOQ.filter(b=>b.section===sec);
+    let rows = items.map(it=>{
+      const qty = genState.qty[it.code] || '';
+      return `<div class="qty-row" data-item-row="${it.code}">
+        <div class="lbl">${it.code} — ${it.label} <span class="muted small">(${it.unit})</span></div>
+        <input type="number" min="0" step="1" placeholder="qty" data-qty-input="${it.code}" value="${qty}">
+        <div class="mono small" data-rate-cell="${it.code}">—</div>
+        <div><span class="badge none" data-src-cell="${it.code}">none</span></div>
+        <div class="mono small" data-amt-cell="${it.code}">—</div>
+      </div>`;
+    }).join('');
+    sectionsHtml += `<details open><summary>${sec}</summary><div class="section-body">
+      <div class="qty-row" style="border-bottom:1px solid var(--line-strong); padding-bottom:6px;">
+        <div class="muted small mono">ITEM</div><div class="muted small mono">QTY</div><div class="muted small mono">RATE</div><div class="muted small mono">SOURCE</div><div class="muted small mono">AMOUNT</div>
+      </div>
+      ${rows}
+      <div class="totals-line" data-subtotal="${sec}"><span>Subtotal — ${sec}</span><span>—</span></div>
+    </div></details>`;
+  });
+
+  return `
+  <div class="panel">
+    <h2>Generate Quotation</h2>
+    <div class="row4">
+      <div><label>Country</label>
+        <input list="country-list-gen" id="g-country" value="${genState.country}" placeholder="Select country">
+        <datalist id="country-list-gen">${countries.map(c=>`<option value="${c}">`).join('')}</datalist>
+      </div>
+      <div><label>Target date (for inflation adjustment)</label><input type="date" id="g-date" value="${genState.targetDate}"></div>
+      <div><label>Site access for this job</label>
+        <select id="g-access">${SITE_ACCESS.map(a=>`<option value="${a.key}" ${genState.siteAccess===a.key?'selected':''}>${a.label}</option>`).join('')}</select>
+      </div>
+      <div style="align-self:end;"><button class="btn" id="run-quote">Calculate</button></div>
+    </div>
+    <div id="access-advisory"></div>
+    <p class="small muted" style="margin-top:8px;">Rates use your own logged quotation for this country if available (inflation-adjusted to the target date). Otherwise the tool derives an estimate from other countries in the same region, scaled by the cost factors set in <a class="linklike" data-goto="settings">Settings</a>, or falls back to a global average as a last resort.</p>
+    <h3>Enter quantities</h3>
+    ${sectionsHtml}
+    <div class="totals-line grand"><span>Grand Total</span><span id="grand-total">—</span></div>
+    <div style="margin-top:12px; display:flex; gap:10px;">
+      <button class="btn ghost" id="export-csv">Download CSV</button>
+    </div>
+  </div>`;
+}
+
+function showAccessAdvisory(){
+  const el = document.getElementById('access-advisory');
+  if(!el) return;
+  if(!genState.country || genState.siteAccess==='standard'){ el.innerHTML=''; return; }
+  const premium = analyzeSensitivityPremium(genState.country);
+  const match = premium && premium.find(p=>p.access===genState.siteAccess);
+  if(match){
+    el.innerHTML = `<div class="panel" style="margin:10px 0; border-color: var(--amber);">
+      <span class="badge regional">site sensitivity</span>
+      &nbsp; Based on ${match.itemCount} item comparison(s) in your log, <b>${SITE_ACCESS.find(a=>a.key===genState.siteAccess).label}</b> sites in
+      ${genState.country} have historically priced <b>${match.avgPremium>=0?'+':''}${match.avgPremium.toFixed(1)}%</b> vs. standard-access sites.
+      This is <b>not</b> applied automatically to the totals below — load a premium manually onto specific line items if it applies to this job.</div>`;
+  } else {
+    el.innerHTML = `<div class="panel" style="margin:10px 0;"><span class="small muted">No logged comparison yet between standard and
+      ${SITE_ACCESS.find(a=>a.key===genState.siteAccess).label.toLowerCase()} sites in ${genState.country} — tag more quotations to build this up.</span></div>`;
+  }
+}
+function updateGenerateResults(){
+  if(!genState.country){ return; }
+  const target = genState.targetDate || new Date().toISOString().slice(0,10);
+  let grand = 0;
+  SECTIONS.forEach(sec=>{
+    let subtotal = 0;
+    BOQ.filter(b=>b.section===sec).forEach(it=>{
+      const qty = parseFloat(genState.qty[it.code]) || 0;
+      const p = getItemPrice(genState.country, it.code, target);
+      const rateCell = document.querySelector(`[data-rate-cell="${it.code}"]`);
+      const srcCell = document.querySelector(`[data-src-cell="${it.code}"]`);
+      const amtCell = document.querySelector(`[data-amt-cell="${it.code}"]`);
+      if(rateCell) rateCell.textContent = p.value!=null ? p.value.toFixed(2) : '—';
+      if(srcCell){ srcCell.textContent = p.source; srcCell.className = `badge ${p.source}`; srcCell.title = p.detail; }
+      const amt = (p.value!=null) ? qty*p.value : 0;
+      if(amtCell) amtCell.textContent = qty>0 ? amt.toFixed(2) : '—';
+      subtotal += amt;
+    });
+    grand += subtotal;
+    const subEl = document.querySelector(`[data-subtotal="${CSS.escape(sec)}"] span:last-child`);
+    if(subEl) subEl.textContent = '$'+subtotal.toFixed(2);
+  });
+  const g = document.getElementById('grand-total');
+  if(g) g.textContent = '$'+grand.toFixed(2);
+}
+
+function exportCSV(){
+  if(!genState.country){ alert('Select a country and click Calculate first.'); return; }
+  const target = genState.targetDate || new Date().toISOString().slice(0,10);
+  let lines = [['Section','Code','Description','Unit','Qty','Rate','Source','Amount'].join(',')];
+  BOQ.forEach(it=>{
+    const qty = parseFloat(genState.qty[it.code]) || 0;
+    if(qty<=0) return;
+    const p = getItemPrice(genState.country, it.code, target);
+    const amt = p.value!=null ? qty*p.value : 0;
+    lines.push([it.section, it.code, `"${it.label.replace(/"/g,'""')}"`, it.unit, qty, p.value!=null?p.value.toFixed(2):'', p.source, amt.toFixed(2)].join(','));
+  });
+  const blob = new Blob([lines.join('\\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `quotation_${genState.country.replace(/\\s+/g,'_')}_${target}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+/* ============================= PRICE TREND ANALYSIS ============================= */
+// Two distinct questions, kept deliberately separate so one doesn't contaminate the other:
+//
+// 1) TIME TREND (same site-access tag, different dates): how much has this country's
+//    pricing for an item actually moved, annualized — compared against the inflation %
+//    you've set for that country. A gap here is "unexplained escalation" (market/
+//    subcontractor pricing power beyond CPI), NOT site sensitivity, because access type
+//    is held constant across the comparison.
+//
+// 2) SITE-SENSITIVITY PREMIUM (same or overlapping dates, different site-access tags):
+//    how much more a restricted/urban/remote/offshore site costs vs a standard site for
+//    the same item in the same country. This isolates the access-difficulty effect from
+//    the passage of time.
+//
+// Both require you to have tagged quotations with a site access type — the tool cannot
+// infer "this was an airport" from a number alone.
+
+function itemQuotesFor(country, code){
+  return quotations
+    .filter(q=>q.country===country && q.rates && q.rates[code]!=null && q.rates[code]!=='')
+    .map(q=>({date:q.date, rate:parseFloat(q.rates[code]), access:q.siteAccess||'standard', sub:q.subcontractor}))
+    .sort((a,b)=> new Date(a.date)-new Date(b.date));
+}
+
+function analyzeTimeTrend(country){
+  // For each item code with >=2 quotes sharing the SAME access tag, compute annualized growth
+  // between the earliest and latest such quote, then compare to the set inflation rate.
+  const results = [];
+  BOQ.forEach(it=>{
+    const pts = itemQuotesFor(country, it.code);
+    if(pts.length < 2) return;
+    const byAccess = {};
+    pts.forEach(p=>{ (byAccess[p.access] = byAccess[p.access]||[]).push(p); });
+    Object.entries(byAccess).forEach(([access, list])=>{
+      if(list.length < 2) return;
+      const first = list[0], last = list[list.length-1];
+      const yrs = yearsBetween(first.date, last.date);
+      if(yrs <= 0.05) return;
+      const cagr = (Math.pow(last.rate/first.rate, 1/yrs) - 1) * 100;
+      results.push({
+        code: it.code, label: it.label, access,
+        firstDate:first.date, firstRate:first.rate, lastDate:last.date, lastRate:last.rate,
+        years: yrs, observedPct: cagr
+      });
+    });
+  });
+  if(!results.length) return null;
+  const avgObserved = results.reduce((s,r)=>s+r.observedPct,0)/results.length;
+  const setInflation = inflationFor(country);
+  return { rows: results, avgObserved, setInflation, gap: avgObserved - setInflation };
+}
+
+function analyzeSensitivityPremium(country){
+  // For each item, compare average rate for non-standard access tags vs standard,
+  // regardless of date (uses whatever quotes exist), expressed as % premium.
+  const perAccess = {}; // access -> array of {code, ratio}
+  BOQ.forEach(it=>{
+    const pts = itemQuotesFor(country, it.code);
+    const standard = pts.filter(p=>p.access==='standard');
+    if(!standard.length) return;
+    const avgStandard = standard.reduce((s,p)=>s+p.rate,0)/standard.length;
+    SITE_ACCESS.filter(a=>a.key!=='standard').forEach(a=>{
+      const matches = pts.filter(p=>p.access===a.key);
+      if(!matches.length) return;
+      const avgMatch = matches.reduce((s,p)=>s+p.rate,0)/matches.length;
+      const premiumPct = (avgMatch/avgStandard - 1) * 100;
+      (perAccess[a.key] = perAccess[a.key]||[]).push({code:it.code, label:it.label, premiumPct, n:matches.length});
+    });
+  });
+  const summary = Object.entries(perAccess).map(([key, rows])=>({
+    access:key,
+    label: SITE_ACCESS.find(a=>a.key===key).label,
+    avgPremium: rows.reduce((s,r)=>s+r.premiumPct,0)/rows.length,
+    itemCount: rows.length,
+    rows
+  }));
+  return summary.length ? summary : null;
+}
+
+function renderTrends(){
+  const countriesWithMultiple = allCountries()
+    .map(c=>c.name)
+    .filter(name => quotations.filter(q=>q.country===name).length >= 2);
+
+  if(!countriesWithMultiple.length){
+    return `<div class="panel"><div class="empty-state"><div class="big">Not enough data yet</div>
+      This analysis needs at least 2 logged quotations for the same country — ideally the same items,
+      quoted at different dates and/or tagged with different site access types.
+      Add more entries in the <a class="linklike" data-goto="quotations">Quotation Log</a>.</div></div>`;
+  }
+
+  let html = `<div class="panel"><h2>Price Trend Analysis</h2>
+    <p class="small muted">This splits an observed price increase into two separate effects: how much is explained by the
+    inflation % you've set for the country (time trend, same site-access tag), versus how much is a site-sensitivity premium
+    (same time period, different access tag — e.g. airport/restricted vs standard). Both rely entirely on the
+    <span class="mono">Site access type</span> tag you set when logging each quotation.</p></div>`;
+
+  countriesWithMultiple.forEach(country=>{
+    const trend = analyzeTimeTrend(country);
+    const premium = analyzeSensitivityPremium(country);
+    const meta = getCountryMeta(country);
+
+    let trendHtml = '';
+    if(trend){
+      const gapFlag = Math.abs(trend.gap) < 2 ? 'direct' : (trend.gap>0 ? 'regional' : 'global');
+      trendHtml = `<h3>Time trend (same site-access tag) — observed vs. set inflation</h3>
+        <table><thead><tr><th>Item</th><th>Access</th><th>First</th><th>Latest</th><th class="num">Yrs</th><th class="num">Observed CAGR</th></tr></thead><tbody>
+        ${trend.rows.map(r=>`<tr><td>${r.label}</td><td class="small">${SITE_ACCESS.find(a=>a.key===r.access).label}</td>
+          <td class="small">${r.firstDate}: ${r.firstRate.toFixed(2)}</td><td class="small">${r.lastDate}: ${r.lastRate.toFixed(2)}</td>
+          <td class="num">${r.years.toFixed(1)}</td><td class="num">${r.observedPct.toFixed(1)}%</td></tr>`).join('')}
+        </tbody></table>
+        <div class="totals-line"><span>Average observed escalation (same access type)</span><span>${trend.avgObserved.toFixed(1)}%/yr</span></div>
+        <div class="totals-line"><span>Inflation currently set for ${country}</span><span>${trend.setInflation.toFixed(1)}%/yr</span></div>
+        <div class="totals-line grand"><span>Unexplained gap</span><span><span class="badge ${gapFlag}">${trend.gap>=0?'+':''}${trend.gap.toFixed(1)} pts/yr</span></span></div>
+        <p class="small muted">A gap near zero means the inflation % you've set already explains what you're seeing — no action needed.
+        A large positive gap (comparisons above use the <em>same</em> access tag, so this isn't a site-sensitivity artifact) suggests this
+        country's real cost escalation is running ahead of CPI — worth raising the inflation % in Settings.
+        A negative gap suggests you may be over-escalating relative to what subcontractors are actually charging.</p>`;
+    } else {
+      trendHtml = `<p class="small muted">Not enough same-access-tag repeat quotes yet to compute a time trend for ${country} — needs the same item quoted twice, with the same site access tag, at different dates.</p>`;
+    }
+
+    let premiumHtml = '';
+    if(premium){
+      premiumHtml = `<h3>Site-sensitivity premium (vs. standard-access sites)</h3>
+        <table><thead><tr><th>Access type</th><th class="num">Avg premium</th><th class="num">Items compared</th></tr></thead><tbody>
+        ${premium.map(p=>`<tr><td>${p.label}</td><td class="num">${p.avgPremium>=0?'+':''}${p.avgPremium.toFixed(1)}%</td><td class="num">${p.itemCount}</td></tr>`).join('')}
+        </tbody></table>
+        <p class="small muted">This is the average extra (or lower) cost seen for that access type vs. standard-access quotes for the
+        same items in ${country}, independent of when each was quoted. Use it in <a class="linklike" data-goto="generate">Generate Quote</a> as a
+        manual loading on top of the base estimate when you know the job is at a sensitive site.</p>`;
+    } else {
+      premiumHtml = `<p class="small muted">No standard-vs-restricted comparison available yet for ${country} — needs at least one quotation tagged "Standard / open site" and one tagged with another access type, for the same item.</p>`;
+    }
+
+    html += `<div class="panel" style="margin-top:16px;">
+      <h2 style="border:none; padding:0; margin-bottom:10px;">${country} <span class="tag-country">${meta?meta.region:''}</span></h2>
+      ${trendHtml}
+      ${premiumHtml}
+    </div>`;
+  });
+
+  return html;
+}
+
+/* ============================= SETTINGS TAB ============================= */
+
+function renderSettings(){
+  const countries = allCountries().sort((a,b)=>a.name.localeCompare(b.name));
+  const rows = countries.map(c=>{
+    const infl = settings.inflationRates[c.name] ?? '';
+    const factor = settings.costFactors[c.name] ?? '';
+    const ref = REFERENCE_INFLATION[c.name];
+    return `<tr>
+      <td>${c.name}</td><td class="small muted">${c.region}</td>
+      <td><input type="number" step="0.1" data-infl="${c.name}" placeholder="${settings.defaultInflation}" value="${infl}" style="width:80px;">
+        ${ref ? `<div class="small muted" style="margin-top:2px;">World Bank ${ref.y}: ${ref.v}%</div>` : `<div class="small muted" style="margin-top:2px;">no reference data</div>`}</td>
+      <td><input type="number" step="0.05" data-factor="${c.name}" placeholder="1.0" value="${factor}" style="width:80px;"></td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="panel">
+      <h2>Country Rate Factors</h2>
+      <p class="small muted">Annual inflation % used to escalate old quotations to today. Cost factor is a relative multiplier used only when deriving estimates for countries with no direct quotation (1.0 = same as regional average; 1.2 = runs ~20% higher, etc). Leave blank to use the default.</p>
+      <div class="row3" style="margin-bottom:10px;">
+        <div><label>Default inflation % (used when a country has no override)</label>
+          <input type="number" step="0.1" id="default-infl" value="${settings.defaultInflation}"></div>
+      </div>
+      <div class="flex-between" style="margin-bottom:8px;">
+        <p class="small muted" style="margin:0;">Reference values are World Bank CPI inflation, latest available year per country (mostly 2024). Loading fills the fields below only — nothing is saved until you click Save Settings, so you can edit or discard any of them first.</p>
+        <button class="btn ghost" id="load-reference-infl" style="white-space:nowrap;">Load reference data</button>
+      </div>
+      <div style="max-height:520px; overflow:auto;">
+        <table><thead><tr><th>Country</th><th>Region</th><th>Inflation %</th><th>Cost factor</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+      <button class="btn" id="save-settings" style="margin-top:12px;">Save Settings</button>
+    </div>
+    <div class="panel">
+      <h2>Add a Country / Location</h2>
+      <p class="small muted">For a project location not already in the list. Approximate latitude/longitude is enough — it's only used to place the marker on the coverage map.</p>
+      <div class="row3">
+        <div><label>Name</label><input id="nc-name" placeholder="e.g. Rwanda"></div>
+        <div><label>Region (group for fallback pricing)</label>
+          <input list="region-list" id="nc-region" placeholder="Select or type new">
+          <datalist id="region-list">${REGIONS.map(r=>`<option value="${r}">`).join('')}</datalist>
+        </div>
+      </div>
+      <div class="row3" style="margin-top:10px;">
+        <div><label>Latitude</label><input type="number" step="0.1" id="nc-lat" placeholder="-1.9"></div>
+        <div><label>Longitude</label><input type="number" step="0.1" id="nc-lon" placeholder="30.0"></div>
+        <div style="align-self:end;"><button class="btn" id="add-country">Add Country</button></div>
+      </div>
+      <h3>Custom countries added (${customCountries.length})</h3>
+      ${customCountries.length ? `<table><thead><tr><th>Name</th><th>Region</th><th></th></tr></thead><tbody>
+        ${customCountries.map(c=>`<tr><td>${c.name}</td><td class="small muted">${c.region}</td><td><a class="linklike" data-del-country="${c.name}">Remove</a></td></tr>`).join('')}
+      </tbody></table>` : `<p class="small muted">None yet.</p>`}
+    </div>
+  </div>
+  <div class="panel" style="margin-top:20px;">
+    <h2>Map Reference Basket</h2>
+    <p class="small muted">This is the fixed "sample job" used only to color/size the dots on the Coverage Map — it has no effect on
+    Generate Quote, which always uses the real quantities you type in there. Set a quantity for any item you want included;
+    leave at 0 to exclude it. Pick items that reflect the work you actually price most often — e.g. add CPT or MASW if
+    geophysics is a bigger part of your business than conventional drilling.</p>
+    <div style="max-height:420px; overflow:auto;">
+      ${SECTIONS.map(sec=>`<details><summary>${sec}</summary><div class="section-body">
+        ${BOQ.filter(b=>b.section===sec).map(it=>{
+          const existing = currentBasket().find(b=>b.code===it.code);
+          return `<div class="item-row"><div class="lbl">${it.code} — ${it.label} <span class="unit">(${it.unit})</span></div>
+            <input type="number" min="0" step="1" data-basket-qty="${it.code}" value="${existing?existing.qty:0}"></div>`;
+        }).join('')}
+      </div></details>`).join('')}
+    </div>
+    <button class="btn" id="save-basket" style="margin-top:12px;">Save Basket</button>
+  </div>`;
+}
+
+/* ============================= EVENT HANDLERS ============================= */
+
+function attachHandlers(){
+  document.querySelectorAll('[data-goto]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      currentTab = el.dataset.goto;
+      document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
+      render();
+    });
+  });
+
+  if(currentTab==='dashboard'){
+    document.querySelectorAll('.marker').forEach(m=>{
+      m.addEventListener('click', ()=>{ selectedMapCountry = m.dataset.country; render(); });
+    });
+    const closeBtn = document.querySelector('[data-close-detail]');
+    if(closeBtn) closeBtn.addEventListener('click', ()=>{ selectedMapCountry=null; render(); });
+    const modeBasketBtn = document.getElementById('mode-basket');
+    const modeSingleBtn = document.getElementById('mode-single');
+    if(modeBasketBtn) modeBasketBtn.addEventListener('click', ()=>{ mapMode='basket'; render(); });
+    if(modeSingleBtn) modeSingleBtn.addEventListener('click', ()=>{ mapMode='single'; render(); });
+    const itemSelect = document.getElementById('single-item-select');
+    if(itemSelect) itemSelect.addEventListener('change', ()=>{ mapSingleItem = itemSelect.value; render(); });
+  }
+
+  if(currentTab==='quotations'){
+    const saveBtn = document.getElementById('save-quote');
+    if(saveBtn) saveBtn.addEventListener('click', async ()=>{
+      const country = document.getElementById('q-country').value.trim();
+      if(!country){ alert('Enter a country.'); return; }
+      const date = document.getElementById('q-date').value;
+      const currency = document.getElementById('q-currency').value;
+      const subcontractor = document.getElementById('q-sub').value.trim();
+      const notes = document.getElementById('q-notes').value.trim();
+      const siteAccess = document.getElementById('q-access').value;
+      const rates = {};
+      document.querySelectorAll('[data-rate-input]').forEach(inp=>{
+        if(inp.value!=='' ) rates[inp.dataset.rateInput] = parseFloat(inp.value);
+      });
+      if(!getCountryMeta(country)){
+        customCountries.push({name:country, region:'Unassigned', lat:0, lon:0});
+        await saveCountries();
+      }
+      if(editingQuoteId!=null){
+        const q = quotations.find(x=>x.id===editingQuoteId);
+        Object.assign(q, {country,date,currency,subcontractor,notes,siteAccess,rates});
+      } else {
+        quotations.push({id: Date.now(), country, date, currency, subcontractor, notes, siteAccess, rates});
+      }
+      editingQuoteId = null;
+      await saveQuotations();
+      render();
+    });
+    const cancelBtn = document.getElementById('cancel-edit');
+    if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ editingQuoteId=null; render(); });
+
+    document.querySelectorAll('[data-edit-quote]').forEach(el=>{
+      el.addEventListener('click', ()=>{ editingQuoteId = parseInt(el.dataset.editQuote); render(); });
+    });
+    document.querySelectorAll('[data-del-quote]').forEach(el=>{
+      el.addEventListener('click', async ()=>{
+        if(confirm('Delete this quotation?')){
+          quotations = quotations.filter(q=>q.id!==parseInt(el.dataset.delQuote));
+          await saveQuotations(); render();
+        }
+      });
+    });
+  }
+
+  if(currentTab==='generate'){
+    const countryInput = document.getElementById('g-country');
+    const dateInput = document.getElementById('g-date');
+    const accessInput = document.getElementById('g-access');
+    countryInput.addEventListener('change', ()=>{ genState.country = countryInput.value.trim(); });
+    dateInput.addEventListener('change', ()=>{ genState.targetDate = dateInput.value; });
+    accessInput.addEventListener('change', ()=>{ genState.siteAccess = accessInput.value; showAccessAdvisory(); });
+    document.getElementById('run-quote').addEventListener('click', ()=>{
+      genState.country = countryInput.value.trim();
+      genState.targetDate = dateInput.value;
+      genState.siteAccess = accessInput.value;
+      if(!genState.country || !getCountryMeta(genState.country)){ alert('Select a valid country from the list.'); return; }
+      updateGenerateResults();
+      showAccessAdvisory();
+    });
+    document.querySelectorAll('[data-qty-input]').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        genState.qty[inp.dataset.qtyInput] = inp.value;
+        if(genState.country) updateGenerateResults();
+      });
+    });
+    document.getElementById('export-csv').addEventListener('click', exportCSV);
+    if(genState.country){ updateGenerateResults(); showAccessAdvisory(); }
+  }
+
+  if(currentTab==='settings'){
+    document.getElementById('load-reference-infl').addEventListener('click', ()=>{
+      let loaded=0, skipped=0;
+      document.querySelectorAll('[data-infl]').forEach(inp=>{
+        const ref = REFERENCE_INFLATION[inp.dataset.infl];
+        if(ref){ inp.value = ref.v; loaded++; } else { skipped++; }
+      });
+      alert(`Loaded ${loaded} reference inflation values into the fields below.\\n${skipped} countries have no reliable recent figure (e.g. Syria, Yemen, Sudan, DR Congo, Myanmar) and were left as-is — set those manually if you have better data.\\n\\nNothing is saved yet — review, edit, then click Save Settings.`);
+    });
+    document.getElementById('save-settings').addEventListener('click', async ()=>{
+      settings.defaultInflation = parseFloat(document.getElementById('default-infl').value) || 3;
+      document.querySelectorAll('[data-infl]').forEach(inp=>{
+        if(inp.value!=='') settings.inflationRates[inp.dataset.infl] = parseFloat(inp.value);
+        else delete settings.inflationRates[inp.dataset.infl];
+      });
+      document.querySelectorAll('[data-factor]').forEach(inp=>{
+        if(inp.value!=='') settings.costFactors[inp.dataset.factor] = parseFloat(inp.value);
+        else delete settings.costFactors[inp.dataset.factor];
+      });
+      await saveSettings();
+      alert('Settings saved.');
+    });
+    document.getElementById('add-country').addEventListener('click', async ()=>{
+      const name = document.getElementById('nc-name').value.trim();
+      const region = document.getElementById('nc-region').value.trim();
+      const lat = parseFloat(document.getElementById('nc-lat').value);
+      const lon = parseFloat(document.getElementById('nc-lon').value);
+      if(!name || !region || isNaN(lat) || isNaN(lon)){ alert('Fill in all fields.'); return; }
+      if(getCountryMeta(name)){ alert('That country already exists.'); return; }
+      customCountries.push({name, region, lat, lon});
+      await saveCountries();
+      render();
+    });
+    document.querySelectorAll('[data-del-country]').forEach(el=>{
+      el.addEventListener('click', async ()=>{
+        customCountries = customCountries.filter(c=>c.name!==el.dataset.delCountry);
+        await saveCountries(); render();
+      });
+    });
+    document.getElementById('save-basket').addEventListener('click', async ()=>{
+      const basket = [];
+      document.querySelectorAll('[data-basket-qty]').forEach(inp=>{
+        const qty = parseFloat(inp.value);
+        if(qty > 0) basket.push({code: inp.dataset.basketQty, qty});
+      });
+      if(!basket.length){ alert('Select at least one item with a quantity greater than 0.'); return; }
+      settings.referenceBasket = basket;
+      await saveSettings();
+      alert(`Basket saved — ${basket.length} item(s). The Coverage Map will use this next time you open it.`);
+    });
+  }
+}
+
+/* ============================= EXPORT / IMPORT ============================= */
+
+function exportAllData(){
+  const payload = {
+    app: 'si-rate-book',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    quotations, customCountries, settings
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `si-rate-book-backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importAllData(file){
+  const reader = new FileReader();
+  reader.onload = async (e)=>{
+    let payload;
+    try{ payload = JSON.parse(e.target.result); }
+    catch(err){ alert('This file is not a valid backup file (could not read it as JSON).'); return; }
+    if(!payload || payload.app!=='si-rate-book' || !Array.isArray(payload.quotations)){
+      alert('This file does not look like an SI Rate Book backup. Import cancelled — nothing was changed.');
+      return;
+    }
+    const incoming = payload.quotations.length;
+    const current = quotations.length;
+    const mode = current === 0 ? 'replace' :
+      (confirm(`This device currently has ${current} quotation(s). The backup file contains ${incoming}.\n\nOK = MERGE (add the backup's quotations to what's here, skipping exact duplicates)\nCancel = REPLACE (wipe this device's data and use only the backup)`) ? 'merge' : 'replace');
+    if(mode==='replace'){
+      quotations = payload.quotations;
+      customCountries = payload.customCountries || [];
+      settings = payload.settings || settings;
+    } else {
+      const existingIds = new Set(quotations.map(q=>q.id));
+      payload.quotations.forEach(q=>{
+        if(!existingIds.has(q.id)) quotations.push(q);
+      });
+      (payload.customCountries||[]).forEach(c=>{
+        if(!getCountryMeta(c.name)) customCountries.push(c);
+      });
+      // settings: incoming fills gaps only, existing values on this device win
+      const inc = payload.settings || {};
+      settings.inflationRates = Object.assign({}, inc.inflationRates||{}, settings.inflationRates);
+      settings.costFactors = Object.assign({}, inc.costFactors||{}, settings.costFactors);
+      if(settings.referenceBasket==null && inc.referenceBasket) settings.referenceBasket = inc.referenceBasket;
+    }
+    await saveQuotations(); await saveCountries(); await saveSettings();
+    alert(`Import complete — ${quotations.length} quotation(s) now on this device.`);
+    render();
+  };
+  reader.readAsText(file);
+}
+
+/* ============================= INIT ============================= */
+
+(async function init(){
+  await loadAll();
+  document.getElementById('export-data').addEventListener('click', exportAllData);
+  document.getElementById('import-data').addEventListener('click', ()=>document.getElementById('import-file').click());
+  document.getElementById('import-file').addEventListener('change', (e)=>{
+    if(e.target.files && e.target.files[0]){ importAllData(e.target.files[0]); e.target.value=''; }
+  });
+  render();
+})();
+</script>
+</body>
+</html>
