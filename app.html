@@ -161,7 +161,9 @@
 const BOQ = [
   {code:'GEN-A', section:'General', label:'Mobilization', unit:'Item'},
 
-  {code:'BOR-A', section:'Boring and Sampling', label:'Moving/setting up drilling rig (permits, GPR/utility clearance, depths 15–30m)', unit:'No.'},
+  {code:'BOR-A1', section:'Boring and Sampling', label:'Moving/setting up drilling rig (permits, GPR/utility clearance, depths 10–20m)', unit:'No.'},
+  {code:'BOR-A2', section:'Boring and Sampling', label:'Moving/setting up drilling rig (permits, GPR/utility clearance, depths 10–30m)', unit:'No.'},
+  {code:'BOR-A3', section:'Boring and Sampling', label:'Moving/setting up drilling rig (permits, GPR/utility clearance, depths 10–40m)', unit:'No.'},
   {code:'BOR-B', section:'Boring and Sampling', label:'Drilling in any material except rock (incl. SPT)', unit:'m'},
   {code:'BOR-C', section:'Boring and Sampling', label:'Continuous coring through rock', unit:'m'},
   {code:'BOR-D', section:'Boring and Sampling', label:'Undisturbed sampling', unit:'No.'},
@@ -272,7 +274,7 @@ const SECTIONS = [...new Set(BOQ.map(b=>b.section))];
 
 const DEFAULT_REFERENCE_BASKET = [
   {code:'GEN-A', qty:1},
-  {code:'BOR-A', qty:1},
+  {code:'BOR-A2', qty:1},
   {code:'BOR-B', qty:20},
   {code:'BOR-D', qty:5},
   {code:'LS-A', qty:10},
