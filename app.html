@@ -435,7 +435,7 @@ const CURRENCIES = ['USD','EUR','GBP','AED','SAR','QAR','KWD','OMR','BHD','EGP',
 
 let quotations = [];      // {id, country, subcontractor, currency, date, rates:{code:rate}, notes}
 let customCountries = []; // same shape as BASE_COUNTRIES
-let settings = {defaultInflation:3, inflationRates:{}, costFactors:{}, referenceBasket: DEFAULT_REFERENCE_BASKET.slice(), benchmarkAdjust:{}};
+let settings = {defaultInflation:3, inflationRates:{}, costFactors:{}, referenceBasket: DEFAULT_REFERENCE_BASKET.slice(), benchmarkAdjust:{}, rateBasis:'latest'};
 
 function currentBasket(){
   return (settings.referenceBasket && settings.referenceBasket.length) ? settings.referenceBasket : DEFAULT_REFERENCE_BASKET;
@@ -525,6 +525,24 @@ function costFactorFor(country){
   const v = settings.costFactors[country];
   return (v===undefined || v===null || v==='') ? 1 : parseFloat(v);
 }
+function itemUSDStats(country, area, code, targetDate){
+  // All quotations for this item (optionally filtered to one area), each
+  // converted to USD at its own FX and escalated from its own date.
+  let list = quotations.filter(q=>q.country===country && q.rates && q.rates[code]!==undefined && q.rates[code]!=='' && q.rates[code]!==null);
+  if(area!==null && area!==undefined){
+    const key = (area||'').trim().toLowerCase();
+    list = list.filter(q=>((q.area||'').trim().toLowerCase())===key);
+  }
+  if(!list.length) return null;
+  const vals = list.map(q=>({date:q.date, v: adjustedValueOf(q, code, country, targetDate)}));
+  vals.sort((a,b)=> new Date(b.date)-new Date(a.date));
+  const latest = vals[0].v;
+  const avg = vals.reduce((s,x)=>s+x.v,0)/vals.length;
+  return { latest, avg, n: vals.length, diffPct: avg!==0 ? (latest/avg - 1)*100 : 0 };
+}
+function chosenRate(stats){
+  return settings.rateBasis==='average' ? stats.avg : stats.latest;
+}
 function latestDirect(country, code){
   const list = quotations.filter(q=>q.country===country && q.rates && q.rates[code]!==undefined && q.rates[code]!=='' && q.rates[code]!==null);
   if(!list.length) return null;
@@ -544,8 +562,9 @@ function adjustedValueOf(rec, code, country, targetDate){
 function getItemPrice(country, code, targetDate){
   const direct = latestDirect(country, code);
   if(direct){
-    return { value: adjustedValueOf(direct, code, country, targetDate), source:'direct',
-      detail: `Own quotation · ${direct.date}${direct.subcontractor ? ' · '+direct.subcontractor : ''}` };
+    const stats = itemUSDStats(country, null, code, targetDate);
+    return { value: chosenRate(stats), source:'direct', stats,
+      detail: `Own quotation · ${direct.date}${direct.subcontractor ? ' · '+direct.subcontractor : ''}${stats.n>1?` · ${stats.n} quotes on file · basis: ${settings.rateBasis}`:''}` };
   }
   const meta = getCountryMeta(country);
   const region = meta ? meta.region : null;
@@ -716,10 +735,10 @@ function computeBenchmarkRates(today){
     if(exact){
       const rates = {};
       BOQ.forEach(it=>{
-        const rec = latestDirectInArea(target, exact.area, it.code);
-        if(rec) rates[it.code] = adjustedValueOf(rec, it.code, target, today);
+        const stats = itemUSDStats(target, exact.area, it.code, today);
+        if(stats) rates[it.code] = chosenRate(stats);
       });
-      return {rates, basis:`Own quotation — ${target} / ${exact.area||'(no area)'} (latest ${exact.latestDate}), escalated to ${today} at ${inflationFor(target).toFixed(1)}%/yr. All values USD.`};
+      return {rates, basis:`Own quotation — ${target} / ${exact.area||'(no area)'} (latest ${exact.latestDate}), rate basis: ${settings.rateBasis==='average'?'average of all quotations':'latest quotation'}, escalated to ${today} at ${inflationFor(target).toFixed(1)}%/yr. All values USD.`};
     }
   }
   if(countryAreas.length){
@@ -730,10 +749,10 @@ function computeBenchmarkRates(today){
     const pct = (settings.benchmarkAdjust && settings.benchmarkAdjust[akey]!==undefined) ? settings.benchmarkAdjust[akey] : 0;
     const rates = {};
     BOQ.forEach(it=>{
-      const rec = latestDirectInArea(target, srcArea, it.code);
-      if(rec) rates[it.code] = adjustedValueOf(rec, it.code, target, today) * (1 + pct/100);
+      const stats = itemUSDStats(target, srcArea, it.code, today);
+      if(stats) rates[it.code] = chosenRate(stats) * (1 + pct/100);
     });
-    return {rates, basis:`Benchmarked — ${target}${tArea?' / '+tArea:''} from ${srcArea||'(no area)'} rates escalated to ${today} at ${inflationFor(target).toFixed(1)}%/yr, adjusted ${pct>=0?'+':''}${pct}%. All values USD.`};
+    return {rates, basis:`Benchmarked — ${target}${tArea?' / '+tArea:''} from ${srcArea||'(no area)'} rates (basis: ${settings.rateBasis==='average'?'average of all quotations':'latest quotation'}) escalated to ${today} at ${inflationFor(target).toFixed(1)}%/yr, adjusted ${pct>=0?'+':''}${pct}%. All values USD.`};
   }
   const pool = countriesWithDirectData();
   if(!pool.length) return null;
@@ -742,10 +761,10 @@ function computeBenchmarkRates(today){
   const adj = getBenchmarkAdjust(target, source);
   const rates = {};
   BOQ.forEach(it=>{
-    const rec = latestDirect(source, it.code);
-    if(rec) rates[it.code] = adjustedValueOf(rec, it.code, source, today) * (1 + adj.pct/100);
+    const stats = itemUSDStats(source, null, it.code, today);
+    if(stats) rates[it.code] = chosenRate(stats) * (1 + adj.pct/100);
   });
-  return {rates, basis:`Benchmarked — ${target}${tArea?' / '+tArea:''} from ${source} rates escalated to ${today} at ${inflationFor(source).toFixed(1)}%/yr, adjusted ${adj.pct>=0?'+':''}${adj.pct}% (World Bank ICP default${adj.custom?' overridden by user':''}). All values USD.`};
+  return {rates, basis:`Benchmarked — ${target}${tArea?' / '+tArea:''} from ${source} rates (basis: ${settings.rateBasis==='average'?'average of all quotations':'latest quotation'}) escalated to ${today} at ${inflationFor(source).toFixed(1)}%/yr, adjusted ${adj.pct>=0?'+':''}${adj.pct}% (World Bank ICP default${adj.custom?' overridden by user':''}). All values USD.`};
 }
 
 // Sheet layout matching the original BOQ workbook (one sheet per section + total)
@@ -854,7 +873,13 @@ function renderBenchmarkPanel(today){
       <input id="bm-target-area" value="${benchmarkTargetArea}" placeholder="e.g. Jeddah" list="bm-area-list">
       <datalist id="bm-area-list">${countryAreas.map(a=>`<option value="${a.area}">`).join('')}</datalist>
     </div>
-    <div class="small muted" style="grid-column:span 2; padding-bottom:8px;">Priority: same city → another city in ${target} you choose → nearest country. Press Enter or click away after typing.</div>
+    <div><label>Rate basis (when several quotes exist per item)</label>
+      <select id="bm-basis">
+        <option value="latest" ${settings.rateBasis!=='average'?'selected':''}>Latest quotation</option>
+        <option value="average" ${settings.rateBasis==='average'?'selected':''}>Average of all quotations</option>
+      </select>
+    </div>
+    <div class="small muted" style="padding-bottom:8px;">Priority: same city → another city in ${target} you choose → nearest country.</div>
   </div>`;
 
   // ---------- TIER 1: exact area match ----------
@@ -865,9 +890,12 @@ function renderBenchmarkPanel(today){
       BOQ.forEach(it=>{
         const rec = latestDirectInArea(target, exact.area, it.code);
         if(!rec) return;
-        const raw = toUSD(rec, parseFloat(rec.rates[it.code]));
-        const adj = adjustedValueOf(rec, it.code, target, today);
-        rows += `<tr><td>${it.code} — ${it.label}</td><td class="num">${raw.toFixed(2)}</td><td class="small muted">${rec.date}</td><td class="num">${adj.toFixed(2)}</td></tr>`;
+        const stats = itemUSDStats(target, exact.area, it.code, today);
+        const chosen = chosenRate(stats);
+        const devCell = stats.n>1
+          ? `${stats.avg.toFixed(2)} <span class="small muted">(latest ${stats.diffPct>=0?'+':''}${stats.diffPct.toFixed(0)}% · ${stats.n} quotes)</span>`
+          : '<span class="small muted">— single quote</span>';
+        rows += `<tr><td>${it.code} — ${it.label}</td><td class="small muted">${rec.date}</td><td class="num">${stats.latest.toFixed(2)}</td><td class="num">${devCell}</td><td class="num" style="color:var(--amber); font-weight:700;">${chosen.toFixed(2)}</td></tr>`;
       });
       return `<div class="panel" style="margin-top:16px; border-color: var(--amber);">
         <div class="flex-between"><h2 style="border:none;margin:0;padding:0;">Benchmark — ${target} · ${exact.area||'(no area)'}</h2>
@@ -876,7 +904,7 @@ function renderBenchmarkPanel(today){
         ${areaInput}
         <p class="small muted">Basis: your own quotation(s) logged for ${exact.area||'this area'} (most recent: ${exact.latestDate}), escalated to today at ${inflationFor(target).toFixed(1)}%/yr.</p>
         <div style="max-height:340px; overflow:auto;">
-        <table><thead><tr><th>Item</th><th class="num">Quoted rate (USD)</th><th>As of</th><th class="num">Escalated to today (USD)</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr><th>Item</th><th>Latest date</th><th class="num">Latest (USD, today)</th><th class="num">Average (USD, today)</th><th class="num">Used (${settings.rateBasis})</th></tr></thead><tbody>${rows}</tbody></table>
         </div>
       </div>`;
     }
@@ -893,9 +921,11 @@ function renderBenchmarkPanel(today){
     BOQ.forEach(it=>{
       const rec = latestDirectInArea(target, srcArea, it.code);
       if(!rec) return;
-      const srcAdj = adjustedValueOf(rec, it.code, target, today);
+      const stats = itemUSDStats(target, srcArea, it.code, today);
+      const srcAdj = chosenRate(stats);
       const bench = srcAdj * (1 + savedPct/100);
-      rows += `<tr><td>${it.code} — ${it.label}</td><td class="num">${srcAdj.toFixed(2)}</td><td class="num" style="color:var(--amber);">${bench.toFixed(2)}</td></tr>`;
+      const devNote = stats.n>1 ? `<div class="small muted">${stats.n} quotes · avg ${stats.avg.toFixed(2)} · latest ${stats.diffPct>=0?'+':''}${stats.diffPct.toFixed(0)}% vs avg</div>` : '';
+      rows += `<tr><td>${it.code} — ${it.label}</td><td class="num">${srcAdj.toFixed(2)}${devNote}</td><td class="num" style="color:var(--amber);">${bench.toFixed(2)}</td></tr>`;
     });
     return `<div class="panel" style="margin-top:16px; border-color: var(--amber);">
       <div class="flex-between"><h2 style="border:none;margin:0;padding:0;">Benchmark — ${target}${tArea?' · '+tArea:''}</h2>
@@ -934,9 +964,11 @@ function renderBenchmarkPanel(today){
   BOQ.forEach(it=>{
     const rec = latestDirect(source, it.code);
     if(!rec) return;
-    const srcAdj = adjustedValueOf(rec, it.code, source, today);
+    const stats = itemUSDStats(source, null, it.code, today);
+    const srcAdj = chosenRate(stats);
     const bench = srcAdj * (1 + adj.pct/100);
-    rows += `<tr><td>${it.code} — ${it.label}</td><td class="num">${srcAdj.toFixed(2)}</td><td class="num" style="color:var(--amber);">${bench.toFixed(2)}</td></tr>`;
+    const devNote = stats.n>1 ? `<div class="small muted">${stats.n} quotes · avg ${stats.avg.toFixed(2)} · latest ${stats.diffPct>=0?'+':''}${stats.diffPct.toFixed(0)}% vs avg</div>` : '';
+    rows += `<tr><td>${it.code} — ${it.label}</td><td class="num">${srcAdj.toFixed(2)}${devNote}</td><td class="num" style="color:var(--amber);">${bench.toFixed(2)}</td></tr>`;
   });
 
   return `<div class="panel" style="margin-top:16px; border-color: var(--amber);">
@@ -1223,7 +1255,7 @@ function renderGenerate(){
   return `
   <div class="panel">
     <h2>Generate Quotation</h2>
-    <div class="row4">
+    <div class="row4" style="grid-template-columns: repeat(5, 1fr);">
       <div><label>Country</label>
         <input list="country-list-gen" id="g-country" value="${genState.country}" placeholder="Select country">
         <datalist id="country-list-gen">${countries.map(c=>`<option value="${c}">`).join('')}</datalist>
@@ -1231,6 +1263,12 @@ function renderGenerate(){
       <div><label>Target date (for inflation adjustment)</label><input type="date" id="g-date" value="${genState.targetDate}"></div>
       <div><label>Site access for this job</label>
         <select id="g-access">${SITE_ACCESS.map(a=>`<option value="${a.key}" ${genState.siteAccess===a.key?'selected':''}>${a.label}</option>`).join('')}</select>
+      </div>
+      <div><label>Rate basis (when several quotes exist per item)</label>
+        <select id="g-basis">
+          <option value="latest" ${settings.rateBasis!=='average'?'selected':''}>Latest quotation</option>
+          <option value="average" ${settings.rateBasis==='average'?'selected':''}>Average of all quotations</option>
+        </select>
       </div>
       <div style="align-self:end;"><button class="btn" id="run-quote">Calculate</button></div>
     </div>
@@ -1274,7 +1312,14 @@ function updateGenerateResults(){
       const rateCell = document.querySelector(`[data-rate-cell="${it.code}"]`);
       const srcCell = document.querySelector(`[data-src-cell="${it.code}"]`);
       const amtCell = document.querySelector(`[data-amt-cell="${it.code}"]`);
-      if(rateCell) rateCell.textContent = p.value!=null ? p.value.toFixed(2) : '—';
+      if(rateCell){
+        if(p.value==null) rateCell.textContent='—';
+        else if(p.stats && p.stats.n>1){
+          const other = settings.rateBasis==='average' ? `latest ${p.stats.latest.toFixed(2)}` : `avg ${p.stats.avg.toFixed(2)}`;
+          const d = p.stats.diffPct;
+          rateCell.innerHTML = `${p.value.toFixed(2)}<div class="small muted">${p.stats.n} quotes · ${other} · latest ${d>=0?'+':''}${d.toFixed(0)}% vs avg</div>`;
+        } else rateCell.textContent = p.value.toFixed(2);
+      }
       if(srcCell){ srcCell.textContent = p.source; srcCell.className = `badge ${p.source}`; srcCell.title = p.detail; }
       const amt = (p.value!=null) ? qty*p.value : 0;
       if(amtCell) amtCell.textContent = qty>0 ? amt.toFixed(2) : '—';
@@ -1640,6 +1685,12 @@ function attachHandlers(){
       await saveSettings();
       render();
     });
+    const bmBasis = document.getElementById('bm-basis');
+    if(bmBasis) bmBasis.addEventListener('change', async ()=>{
+      settings.rateBasis = bmBasis.value;
+      await saveSettings();
+      render();
+    });
     const bmExcel = document.getElementById('bm-excel');
     if(bmExcel) bmExcel.addEventListener('click', exportBenchmarkExcel);
     const bmReset = document.getElementById('bm-reset');
@@ -1740,6 +1791,12 @@ function attachHandlers(){
         genState.qty[inp.dataset.qtyInput] = inp.value;
         if(genState.country) updateGenerateResults();
       });
+    });
+    const basisSel = document.getElementById('g-basis');
+    if(basisSel) basisSel.addEventListener('change', async ()=>{
+      settings.rateBasis = basisSel.value;
+      await saveSettings();
+      if(genState.country) updateGenerateResults();
     });
     document.getElementById('export-csv').addEventListener('click', exportCSV);
     if(genState.country){ updateGenerateResults(); showAccessAdvisory(); }
