@@ -1430,6 +1430,38 @@ function analyzeSensitivityPremium(country){
   return summary.length ? summary : null;
 }
 
+// ---- Simple themed SVG horizontal bar chart for the trends tab ----
+// rows: [{label, value (in %), color, note}], zero-baseline, negative bars go left.
+function hBarChartSVG(rows, unit){
+  if(!rows.length) return '';
+  const W = 680, rowH = 40, labelW = 230, pad = 14;
+  const H = rows.length*rowH + 30;
+  const vals = rows.map(r=>r.value);
+  let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+  if(hi===lo){ hi = lo + 1; }
+  const span = hi - lo;
+  lo -= span*0.08; hi += span*0.15;
+  const plotW = W - labelW - pad*2;
+  const xOf = v => labelW + pad + (v - lo)/(hi - lo)*plotW;
+  const x0 = xOf(0);
+  let bars = '';
+  rows.forEach((r,i)=>{
+    const y = 12 + i*rowH;
+    const x1 = Math.min(x0, xOf(r.value)), x2 = Math.max(x0, xOf(r.value));
+    const wRect = Math.max(1.5, x2-x1);
+    bars += `
+      <text x="${labelW+pad-10}" y="${y+15}" text-anchor="end" font-family="JetBrains Mono, monospace" font-size="11.5" fill="var(--ink)">${r.label}</text>
+      ${r.note?`<text x="${labelW+pad-10}" y="${y+28}" text-anchor="end" font-family="Inter, sans-serif" font-size="9.5" fill="var(--ink-muted)">${r.note}</text>`:''}
+      <rect x="${x1}" y="${y+2}" width="${wRect}" height="20" fill="${r.color}" opacity="0.85" rx="2"/>
+      <text x="${r.value>=0? x2+7 : x1-7}" y="${y+16}" text-anchor="${r.value>=0?'start':'end'}" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="${r.color}">${r.value>=0?'+':''}${r.value.toFixed(1)}${unit}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%; max-width:${W}px; display:block; margin:10px 0;" xmlns="http://www.w3.org/2000/svg">
+    <line x1="${x0}" y1="6" x2="${x0}" y2="${H-8}" stroke="var(--line-strong)" stroke-width="1" stroke-dasharray="3,3"/>
+    <text x="${x0}" y="${H-0}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--ink-muted)">0${unit}</text>
+    ${bars}
+  </svg>`;
+}
+
 function renderTrends(){
   const countriesWithMultiple = allCountries()
     .map(c=>c.name)
@@ -1456,7 +1488,13 @@ function renderTrends(){
     let trendHtml = '';
     if(trend){
       const gapFlag = Math.abs(trend.gap) < 2 ? 'direct' : (trend.gap>0 ? 'regional' : 'global');
+      const trendChart = hBarChartSVG([
+        {label:'Observed escalation', note:'what your quotes actually did', value:trend.avgObserved, color:'#2fe3c4'},
+        {label:'Set inflation', note:'your assumption in Settings', value:trend.setInflation, color:'#7c8a8a'},
+        {label:'Gap (unexplained)', note:'observed minus assumption', value:trend.gap, color: Math.abs(trend.gap)<2 ? '#2fe3c4' : '#f2a63d'},
+      ], '%/yr');
       trendHtml = `<h3>Time trend (same site-access tag) — observed vs. set inflation</h3>
+        ${trendChart}
         <table><thead><tr><th>Item</th><th>Access</th><th>First</th><th>Latest</th><th class="num">Yrs</th><th class="num">Observed CAGR</th></tr></thead><tbody>
         ${trend.rows.map(r=>`<tr><td>${r.label}</td><td class="small">${SITE_ACCESS.find(a=>a.key===r.access).label}</td>
           <td class="small">${r.firstDate}: ${r.firstRate.toFixed(2)}</td><td class="small">${r.lastDate}: ${r.lastRate.toFixed(2)}</td>
@@ -1475,7 +1513,11 @@ function renderTrends(){
 
     let premiumHtml = '';
     if(premium){
+      const premChart = hBarChartSVG(
+        premium.map(p=>({label:p.label.split(' (')[0], note:`${p.itemCount} item comparison(s)`, value:p.avgPremium, color: p.avgPremium>=0 ? '#f2a63d' : '#2fe3c4'})),
+        '%');
       premiumHtml = `<h3>Site-sensitivity premium (vs. standard-access sites)</h3>
+        ${premChart}
         <table><thead><tr><th>Access type</th><th class="num">Avg premium</th><th class="num">Items compared</th></tr></thead><tbody>
         ${premium.map(p=>`<tr><td>${p.label}</td><td class="num">${p.avgPremium>=0?'+':''}${p.avgPremium.toFixed(1)}%</td><td class="num">${p.itemCount}</td></tr>`).join('')}
         </tbody></table>
