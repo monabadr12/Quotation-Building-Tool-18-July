@@ -65,6 +65,18 @@ gets logged here.
 **To edit or delete a quotation:** find it in the table on the right and click
 **Edit** or **Delete**. Editing loads it back into the form on the left.
 
+**Bulk import from Excel:** instead of typing quotations one by one, you can
+load many at once. Download the `quotations_import_template.xlsx` template
+(provided with the tool package), fill one **column per quotation** — the 8
+header fields (country, area, date, currency, exchange rate, subcontractor,
+site access, notes) plus the item rates in the quotation's own currency — then
+click **Import Excel** at the top of the page and select the file. The import
+reports exactly what was loaded and flags anything it had to skip or default
+(bad dates, unknown site-access values, missing exchange rates). Manual one-by-one
+entry keeps working exactly as before; the two coexist. Don't modify columns A
+and B of the template's Quotations sheet — the import matches rates by the item
+codes in column A.
+
 ---
 
 ## 3. Coverage Map — visualizing prices worldwide

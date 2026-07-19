@@ -141,7 +141,9 @@
   <div style="display:flex; align-items:center; gap:12px;">
     <button class="btn ghost" id="export-data" style="padding:6px 12px;">Export data</button>
     <button class="btn ghost" id="import-data" style="padding:6px 12px;">Import data</button>
+    <button class="btn ghost" id="import-excel" style="padding:6px 12px;">Import Excel</button>
     <input type="file" id="import-file" accept=".json" style="display:none;">
+    <input type="file" id="import-excel-file" accept=".xlsx" style="display:none;">
     <div class="save-note" id="save-indicator">All data saved to this browser/account · nothing shared</div>
   </div>
 </header>
@@ -1954,6 +1956,90 @@ function importAllData(file){
   reader.readAsText(file);
 }
 
+/* ============================= EXCEL BULK IMPORT ============================= */
+
+async function importQuotationsExcel(file){
+  if(typeof ExcelJS === 'undefined'){ alert('Excel library failed to load (no internet?). Try again when online.'); return; }
+  const wb = new ExcelJS.Workbook();
+  try{
+    await wb.xlsx.load(await file.arrayBuffer());
+  }catch(e){ alert('Could not read this file as an Excel workbook.'); return; }
+  const ws = wb.getWorksheet('Quotations');
+  if(!ws){ alert('This file has no "Quotations" sheet — it does not look like the import template.'); return; }
+
+  // Map item codes to their row numbers from column A
+  const codeRow = {};
+  const validCodes = new Set(BOQ.map(b=>b.code));
+  ws.eachRow((row, rn)=>{
+    const a = row.getCell(1).value;
+    if(typeof a === 'string' && validCodes.has(a.trim())) codeRow[a.trim()] = rn;
+  });
+  if(Object.keys(codeRow).length < 5){ alert('Could not find the BOQ item codes in column A — was column A modified?'); return; }
+
+  function cellStr(r, c){
+    const v = ws.getRow(r).getCell(c).value;
+    if(v==null) return '';
+    if(v instanceof Date) return v.toISOString().slice(0,10);
+    if(typeof v === 'object' && v.text) return String(v.text).trim();
+    if(typeof v === 'object' && v.result!=null) return String(v.result).trim();
+    return String(v).trim();
+  }
+  function cellNum(r, c){
+    const v = ws.getRow(r).getCell(c).value;
+    if(v==null || v==='') return null;
+    if(typeof v === 'number') return v;
+    if(typeof v === 'object' && typeof v.result === 'number') return v.result;
+    const n = parseFloat(String(v).replace(/,/g,''));
+    return isNaN(n) ? null : n;
+  }
+  const ACCESS_KEYS = new Set(SITE_ACCESS.map(a=>a.key));
+  const PEG = { SAR:3.75, AED:3.6725, QAR:3.64, BHD:0.376, OMR:0.3845 };
+
+  const imported = [], problems = [];
+  let noFxCount = 0, newCountries = 0;
+  for(let col=3; col<=ws.columnCount+1; col++){
+    const country = cellStr(1, col);
+    if(!country) continue;
+    if(country.toUpperCase().startsWith('EXAMPLE')){ continue; }
+    const area = cellStr(2, col);
+    let date = cellStr(3, col);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ problems.push(`Column ${col}: date "${date}" is not YYYY-MM-DD — column skipped.`); continue; }
+    const currency = (cellStr(4, col) || 'USD').toUpperCase();
+    let fx = cellNum(5, col);
+    if(currency==='USD') fx = 1;
+    if(!fx || fx<=0){
+      if(PEG[currency]) fx = PEG[currency];
+      else { fx = 1; noFxCount++; }
+    }
+    const subcontractor = cellStr(6, col);
+    let siteAccess = (cellStr(7, col) || 'standard').toLowerCase();
+    if(!ACCESS_KEYS.has(siteAccess)){ problems.push(`Column ${col}: site access "${siteAccess}" unknown — set to standard.`); siteAccess='standard'; }
+    const notes = cellStr(8, col);
+    const rates = {};
+    Object.entries(codeRow).forEach(([code, rn])=>{
+      const n = cellNum(rn, col);
+      if(n!=null) rates[code] = n;
+    });
+    if(!Object.keys(rates).length){ problems.push(`Column ${col} (${country}): no item rates found — column skipped.`); continue; }
+    if(!getCountryMeta(country)){ customCountries.push({name:country, region:'Unassigned', lat:0, lon:0}); newCountries++; }
+    imported.push({id: Date.now()+imported.length, country, area, date, currency, fxToUSD:fx, subcontractor, notes, siteAccess, rates});
+  }
+
+  if(!imported.length){
+    alert('No quotations found to import.' + (problems.length? '\n\nIssues:\n' + problems.join('\n') : ''));
+    return;
+  }
+  quotations = quotations.concat(imported);
+  await saveQuotations();
+  if(newCountries) await saveCountries();
+  let msg = `Imported ${imported.length} quotation(s): ` + imported.map(q=>`${q.country}${q.area?'/'+q.area:''} (${q.date})`).join(', ') + '.';
+  if(newCountries) msg += `\n${newCountries} new country name(s) added with region "Unassigned" — set their region and coordinates in Settings.`;
+  if(noFxCount) msg += `\n${noFxCount} non-USD quotation(s) had no exchange rate and no known peg — flagged "no FX" in the log; edit them to fix.`;
+  if(problems.length) msg += '\n\nIssues:\n' + problems.join('\n');
+  alert(msg);
+  render();
+}
+
 /* ============================= INIT ============================= */
 
 (async function init(){
@@ -1962,6 +2048,10 @@ function importAllData(file){
   document.getElementById('import-data').addEventListener('click', ()=>document.getElementById('import-file').click());
   document.getElementById('import-file').addEventListener('change', (e)=>{
     if(e.target.files && e.target.files[0]){ importAllData(e.target.files[0]); e.target.value=''; }
+  });
+  document.getElementById('import-excel').addEventListener('click', ()=>document.getElementById('import-excel-file').click());
+  document.getElementById('import-excel-file').addEventListener('change', (e)=>{
+    if(e.target.files && e.target.files[0]){ importQuotationsExcel(e.target.files[0]); e.target.value=''; }
   });
   render();
 })();
