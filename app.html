@@ -1993,6 +1993,7 @@ async function importQuotationsExcel(file){
     return isNaN(n) ? null : n;
   }
   const ACCESS_KEYS = new Set(SITE_ACCESS.map(a=>a.key));
+  const ACCESS_BY_LABEL = {}; SITE_ACCESS.forEach(a=>{ ACCESS_BY_LABEL[a.label.toLowerCase()] = a.key; });
   const PEG = { SAR:3.75, AED:3.6725, QAR:3.64, BHD:0.376, OMR:0.3845 };
 
   const imported = [], problems = [];
@@ -2012,8 +2013,12 @@ async function importQuotationsExcel(file){
       else { fx = 1; noFxCount++; }
     }
     const subcontractor = cellStr(6, col);
-    let siteAccess = (cellStr(7, col) || 'standard').toLowerCase();
-    if(!ACCESS_KEYS.has(siteAccess)){ problems.push(`Column ${col}: site access "${siteAccess}" unknown — set to standard.`); siteAccess='standard'; }
+    let siteAccessRaw = (cellStr(7, col) || 'standard').trim();
+    let siteAccess = siteAccessRaw.toLowerCase();
+    if(!ACCESS_KEYS.has(siteAccess)){
+      if(ACCESS_BY_LABEL[siteAccess]) siteAccess = ACCESS_BY_LABEL[siteAccess];      // full label picked from dropdown
+      else { problems.push(`Column ${col}: site access "${siteAccessRaw}" unknown — set to standard.`); siteAccess='standard'; }
+    }
     const notes = cellStr(8, col);
     const rates = {};
     Object.entries(codeRow).forEach(([code, rn])=>{
